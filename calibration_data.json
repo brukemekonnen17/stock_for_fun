@@ -134,7 +134,25 @@
       "timestamp": "2025-11-04T22:08:10.456309",
       "arm_name": "REACTIVE",
       "reward": null
+    },
+    {
+      "decision_id": "analyze-HTZ-1762312450",
+      "ticker": "HTZ",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-04T22:14:40.841693",
+      "arm_name": "POST_EVENT_MOMO",
+      "reward": null
+    },
+    {
+      "decision_id": "analyze-HTZ-1762312512",
+      "ticker": "HTZ",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-04T22:15:38.660569",
+      "arm_name": "EARNINGS_PRE",
+      "reward": null
     }
   ],
-  "last_updated": "2025-11-04T22:08:10.456411"
+  "last_updated": "2025-11-04T22:15:38.660660"
 }

@@ -951,28 +951,13 @@ async def decision_propose(body: ProposePayload) -> ProposeResponse:
             post_days=5
         )
         if "car" in event_study and len(event_study["car"]) > 0:
-            # Extract key CAR points
-            car_t1 = next((c for c in event_study["car"] if c["t"] == 1), None)
-            car_t3 = next((c for c in event_study["car"] if c["t"] == 3), None)
-            car_t5 = next((c for c in event_study["car"] if c["t"] == 5), None)
-            
+            # Keep full CAR series for Plotly panel
             event_study_summary = {
-                "car_t+1": {
-                    "mean": car_t1["mean"] if car_t1 else 0.0,
-                    "ci_low": car_t1["ci_low"] if car_t1 else 0.0,
-                    "ci_high": car_t1["ci_high"] if car_t1 else 0.0
-                } if car_t1 else None,
-                "car_t+3": {
-                    "mean": car_t3["mean"] if car_t3 else 0.0,
-                    "ci_low": car_t3["ci_low"] if car_t3 else 0.0,
-                    "ci_high": car_t3["ci_high"] if car_t3 else 0.0
-                } if car_t3 else None,
-                "car_t+5": {
-                    "mean": car_t5["mean"] if car_t5 else 0.0,
-                    "ci_low": car_t5["ci_low"] if car_t5 else 0.0,
-                    "ci_high": car_t5["ci_high"] if car_t5 else 0.0
-                } if car_t5 else None,
-                "supports": car_t1 and car_t1["mean"] > 0.005 if car_t1 else False  # CAR > 0.5% suggests positive
+                "car": event_study["car"],  # Full series for plotting
+                "supports": any(c.get("mean", 0) > 0.005 for c in event_study["car"]),  # Any CAR > 0.5% suggests positive
+                "ticker": event_study.get("ticker", body.ticker),
+                "event": event_study.get("event", cat.event_type),
+                "window": event_study.get("window", {"pre": 5, "post": 5})
             }
     except Exception as e:
         logger.debug(f"[{body.decision_id}] Event study computation failed: {e}")
@@ -1040,6 +1025,131 @@ async def decision_propose(body: ProposePayload) -> ProposeResponse:
     analysis_dict = why.model_dump()
     if evidence:
         analysis_dict["evidence"] = evidence
+    
+    # Add series arrays for Plotly panels (compute once server-side for performance)
+    series_data = {}
+    try:
+        if hist and len(hist) >= 20:
+            from apps.api.evidence_analysis import compute_technical_indicators
+            indicators = compute_technical_indicators(hist, body.price)
+            
+            closes = [h["close"] for h in hist]
+            opens = [h["open"] for h in hist]
+            highs = [h["high"] for h in hist]
+            lows = [h["low"] for h in hist]
+            dates = [h.get("date", "") for h in hist] if all("date" in h for h in hist) else list(range(len(hist)))
+            
+            # Calculate EMAs if not already computed
+            ema20_vals = []
+            ema50_vals = []
+            if len(closes) >= 20:
+                alpha_20 = 2 / (20 + 1)
+                ema20 = closes[0]
+                for c in closes:
+                    ema20 = alpha_20 * c + (1 - alpha_20) * ema20
+                    ema20_vals.append(ema20)
+            else:
+                ema20_vals = [indicators.get("ema20", body.price)] * len(closes)
+            
+            if len(closes) >= 50:
+                alpha_50 = 2 / (50 + 1)
+                ema50 = closes[0]
+                for c in closes:
+                    ema50 = alpha_50 * c + (1 - alpha_50) * ema50
+                    ema50_vals.append(ema50)
+            else:
+                ema50_vals = [indicators.get("ema50", body.price)] * len(closes)
+            
+            series_data = {
+                "dates": dates[-30:] if len(dates) > 30 else dates,
+                "open": opens[-30:] if len(opens) > 30 else opens,
+                "high": highs[-30:] if len(highs) > 30 else highs,
+                "low": lows[-30:] if len(lows) > 30 else lows,
+                "close": closes[-30:] if len(closes) > 30 else closes,
+                "ema20": ema20_vals[-30:] if len(ema20_vals) > 30 else ema20_vals,
+                "ema50": ema50_vals[-30:] if len(ema50_vals) > 30 else ema50_vals,
+                "bb_upper": [indicators.get("bb_upper", body.price * 1.02)] * (len(closes[-30:]) if len(closes) > 30 else len(closes)),
+                "bb_lower": [indicators.get("bb_lower", body.price * 0.98)] * (len(closes[-30:]) if len(closes) > 30 else len(closes)),
+                "recent_high_10d": body.recent_high,
+                "recent_low_10d": body.recent_low
+            }
+    except Exception as e:
+        logger.debug(f"[{body.decision_id}] Series data computation failed: {e}")
+    
+    # Add drivers summary (deterministic, beyond catalysts)
+    drivers = {}
+    try:
+        from services.analysis.enhanced_features import (
+            compute_participation_quality,
+            compute_iv_rv_gap,
+            classify_meme_diagnosis
+        )
+        
+        participation_quality, participation_score = compute_participation_quality(
+            volume_surge_ratio=body.volume_surge_ratio,
+            dollar_adv=body.liquidity,
+            spread=body.spread,
+            price=body.price
+        )
+        
+        # IV-RV gap (already computed above)
+        iv_rv_gap_normalized = max(-1.0, min(1.0, iv_rv_gap / 0.20))
+        
+        # Pattern state
+        pattern_state = "BREAKOUT" if body.breakout_flag else ("RANGE" if 0.2 < body.price_position < 0.8 else "PULLBACK")
+        pattern_strength = "strong" if body.volume_surge_ratio >= 1.5 else ("weak" if body.volume_surge_ratio >= 1.2 else "none")
+        
+        # Meme risk
+        social_mentions = social_data.get("mention_count_total", 0)
+        social_spike_ratio = social_mentions / max(1, 50)  # Normalize to 50 mentions baseline
+        meme_risk, meme_explanation = classify_meme_diagnosis(
+            social_spike_ratio=social_spike_ratio,
+            participation_quality=participation_quality,
+            volume_surge_ratio=body.volume_surge_ratio,
+            float_market_cap=None  # Could compute from dollar_adv if needed
+        )
+        
+        drivers = {
+            "pattern": f"{pattern_state.upper()} ({pattern_strength})",
+            "participation": participation_quality,
+            "sector_relative_strength": sector_rel_strength,
+            "iv_minus_rv": iv_rv_gap_normalized,
+            "meme_risk": meme_risk
+        }
+    except Exception as e:
+        logger.debug(f"[{body.decision_id}] Drivers computation failed: {e}")
+    
+    # Compute NBA (Next-Best-Action) score for prioritization
+    nba_score = 0.0
+    try:
+        # Signal buy strength (from evidence tests)
+        sig_buy = 1.0 if any(t.get("decision_label") == "BUY" and t.get("p_value", 1.0) < 0.05 for t in evidence.get("tests", [])) else 0.0
+        
+        # Weights
+        w1, w2, w3, w4, w5 = 0.3, 0.25, 0.2, 0.15, 0.1
+        
+        participation_score_val = participation_score if 'participation_score' in locals() else 0.5
+        spread_penalty = min(1.0, body.spread / (body.price * 0.01))  # Penalty if spread > 1% of price
+        meme_noise_penalty = 0.3 if meme_risk == "NOISE" else 0.0
+        
+        nba_score = (
+            w1 * sig_buy +
+            w2 * calibrated_confidence +
+            w3 * participation_score_val -
+            w4 * spread_penalty -
+            w5 * meme_noise_penalty
+        )
+        nba_score = max(0.0, min(1.0, nba_score))  # Clamp to [0, 1]
+    except Exception as e:
+        logger.debug(f"[{body.decision_id}] NBA score computation failed: {e}")
+    
+    # Add series, drivers, and NBA to analysis
+    if series_data:
+        analysis_dict["series"] = series_data
+    if drivers:
+        analysis_dict["drivers"] = drivers
+    analysis_dict["nba_score"] = nba_score
+    analysis_dict["timestamp"] = datetime.utcnow().isoformat()
     
     return ProposeResponse(
         selected_arm=selected_arm,

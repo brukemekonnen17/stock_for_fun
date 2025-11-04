@@ -1314,6 +1314,294 @@
         updateTime();
         setInterval(updateTime, 60000);
 
+        // ========================================
+        // PLOTLY EVIDENCE PANELS (Multi-Panel Charts)
+        // ========================================
+        
+        // Safe Plotly render function (prevents black charts)
+        function safePlot(id, data, layout) {
+            const el = document.getElementById(id);
+            if (!el) {
+                console.warn(`Plotly container ${id} not found`);
+                return;
+            }
+            
+            // Ensure container has dimensions
+            if (el.offsetHeight === 0) {
+                el.style.height = el.id === 'panel-candles' ? '420px' : '280px';
+            }
+            if (el.offsetWidth === 0) {
+                el.style.width = '100%';
+            }
+            
+            const base = {
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                font: { color: '#2E2E2E', family: 'Inter' },
+                margin: { l: 48, r: 24, t: 24, b: 32 }
+            };
+            
+            Plotly.newPlot(el, data, Object.assign(base, layout || {}), { 
+                displayModeBar: true, 
+                responsive: true,
+                modeBarButtonsToRemove: ['lasso2d', 'select2d']
+            });
+            
+            requestAnimationFrame(() => Plotly.Plots.resize(el));
+            
+            // Debounced resize handler
+            let resizeTimeout;
+            const resizeHandler = () => {
+                clearTimeout(resizeTimeout);
+                resizeTimeout = setTimeout(() => Plotly.Plots.resize(el), 100);
+            };
+            window.removeEventListener('resize', resizeHandler);
+            window.addEventListener('resize', resizeHandler, { passive: true });
+        }
+
+        // Candles + EMA20/50 + BB + 10-day band
+        function renderCandlesPanel(series) {
+            if (!series || !series.dates || !series.close || !series.close.length) {
+                console.warn('No series data for candles panel');
+                return;
+            }
+            
+            const { dates, open, high, low, close, ema20, ema50, bb_upper, bb_lower, recent_high_10d, recent_low_10d } = series;
+            
+            const traces = [
+                { type: 'candlestick', x: dates, open: open, high: high, low: low, close: close, name: 'Price' },
+                { type: 'scatter', mode: 'lines', x: dates, y: ema20, name: 'EMA20', line: { color: '#3b82f6', width: 1 } },
+                { type: 'scatter', mode: 'lines', x: dates, y: ema50, name: 'EMA50', line: { color: '#8b5cf6', width: 1 } },
+                { type: 'scatter', mode: 'lines', x: dates, y: bb_upper, name: 'BB Upper', line: { color: '#6b7280', width: 1, dash: 'dot' } },
+                { type: 'scatter', mode: 'lines', x: dates, y: bb_lower, name: 'BB Lower', line: { color: '#6b7280', width: 1, dash: 'dot' } }
+            ];
+            
+            const shapes = [];
+            if (recent_high_10d) {
+                shapes.push({
+                    type: 'line',
+                    x0: dates[0],
+                    x1: dates[dates.length - 1],
+                    y0: recent_high_10d,
+                    y1: recent_high_10d,
+                    line: { dash: 'dot', width: 1, color: '#ef4444' }
+                });
+            }
+            if (recent_low_10d) {
+                shapes.push({
+                    type: 'line',
+                    x0: dates[0],
+                    x1: dates[dates.length - 1],
+                    y0: recent_low_10d,
+                    y1: recent_low_10d,
+                    line: { dash: 'dot', width: 1, color: '#10b981' }
+                });
+            }
+            
+            safePlot('panel-candles', traces, {
+                shapes: shapes,
+                xaxis: { rangeslider: { visible: false }, type: 'date' },
+                yaxis: { title: 'Price ($)', fixedrange: false }
+            });
+        }
+
+        // Event-study CAR ± CI
+        function renderCarPanel(car) {
+            if (!car || !car.length) {
+                console.warn('No CAR data for panel');
+                return;
+            }
+            
+            const t = car.map(d => d.t || d.day);
+            const mu = car.map(d => d.mean || d.car || 0);
+            const lo = car.map(d => d.ci_low !== undefined ? d.ci_low : (d.mean || 0));
+            const hi = car.map(d => d.ci_high !== undefined ? d.ci_high : (d.mean || 0));
+            
+            const ciPolyX = [...t, ...t.slice().reverse()];
+            const ciPolyY = [...hi, ...lo.slice().reverse()];
+            
+            const traces = [
+                { x: t, y: mu, type: 'scatter', mode: 'lines', name: 'CAR', line: { color: '#3b82f6', width: 2 } },
+                { x: ciPolyX, y: ciPolyY, type: 'scatter', fill: 'toself', name: '95% CI', hoverinfo: 'skip', opacity: 0.2, line: { shape: 'linear', color: '#3b82f6' } }
+            ];
+            
+            const yMin = Math.min(...lo, ...mu, 0);
+            const yMax = Math.max(...hi, ...mu, 0);
+            
+            safePlot('panel-car', traces, {
+                shapes: [{ type: 'line', x0: 0, x1: 0, y0: yMin, y1: yMax, line: { dash: 'dot', color: '#6b7280' } }],
+                yaxis: { zeroline: true, zerolinecolor: '#666', title: 'CAR' },
+                xaxis: { title: 'Days around event', zeroline: false }
+            });
+        }
+
+        // R-distribution (per arm) with Median marker
+        function renderRDistPanel(armStats) {
+            if (!armStats || !armStats.samples || armStats.samples === 0) {
+                console.warn('No arm stats data for R-distribution panel');
+                return;
+            }
+            
+            const r_values = armStats.r_values || [];
+            const median = armStats.median_r_point ?? armStats.median_r?.point ?? null;
+            
+            const traces = [];
+            const layout = {};
+            
+            if (r_values.length > 0) {
+                traces.push({
+                    type: 'histogram',
+                    x: r_values,
+                    nbinsx: 30,
+                    name: 'R',
+                    marker: { color: '#3b82f6', opacity: 0.7 }
+                });
+            } else if (median !== null) {
+                traces.push({
+                    type: 'scatter',
+                    mode: 'markers',
+                    x: [median],
+                    y: [1],
+                    name: 'Median R',
+                    marker: { size: 10, color: '#ef4444' }
+                });
+            }
+            
+            if (median !== null && r_values.length > 0) {
+                const maxCount = Math.max(...(Object.values(r_values.reduce((acc, r) => {
+                    const bin = Math.floor((r - Math.min(...r_values)) / ((Math.max(...r_values) - Math.min(...r_values)) / 30));
+                    acc[bin] = (acc[bin] || 0) + 1;
+                    return acc;
+                }, {}))));
+                
+                layout.shapes = [{
+                    type: 'line',
+                    x0: median,
+                    x1: median,
+                    y0: 0,
+                    y1: maxCount || 1,
+                    xref: 'x',
+                    yref: 'y',
+                    line: { dash: 'dot', width: 2, color: '#ef4444' }
+                }];
+                layout.annotations = [{
+                    x: median,
+                    y: maxCount || 1,
+                    yref: 'y',
+                    text: `Median ${median.toFixed(3)}`,
+                    showarrow: false,
+                    yanchor: 'bottom',
+                    font: { color: '#ef4444', size: 11 }
+                }];
+            }
+            
+            safePlot('panel-rdist', traces, Object.assign(layout, {
+                xaxis: { title: 'Return (R)', zeroline: true },
+                yaxis: { title: 'Frequency' }
+            }));
+        }
+
+        // Wire all evidence panels together
+        async function renderEvidencePanels(analysis) {
+            // 1) Candles panel
+            if (analysis.series) {
+                renderCandlesPanel(analysis.series);
+            }
+            
+            // 2) CAR panel - fetch or use analysis.evidence.event_study.car
+            let car = analysis?.evidence?.event_study?.car || analysis?.evidence?.event_study_summary?.car;
+            if (!car || !car.length) {
+                try {
+                    const ticker = analysis.ticker || analysis.analysis?.ticker;
+                    const event = analysis.catalyst?.event_type || analysis.analysis?.catalyst?.event_type || 'EARNINGS';
+                    const r = await fetch(`${API_BASE}/evidence/event-study?ticker=${ticker}&event=${event}&pre=5&post=5`);
+                    if (r.ok) {
+                        const js = await r.json();
+                        car = js.car || [];
+                    }
+                } catch (e) {
+                    console.warn('Failed to fetch CAR data:', e);
+                }
+            }
+            renderCarPanel(car || []);
+            
+            // 3) R-distribution panel
+            const arm = analysis?.strategy?.selected_arm || analysis?.selected_arm || 'POST_EVENT_MOMO';
+            try {
+                const st = await fetch(`${API_BASE}/stats/arms/ci?arm=${encodeURIComponent(arm)}`);
+                if (st.ok) {
+                    const armStats = await st.json();
+                    renderRDistPanel(armStats);
+                }
+            } catch (e) {
+                console.warn('Failed to fetch arm stats:', e);
+            }
+        }
+
+        // Wire action slab handlers
+        function wireActionSlab(analysis, plan) {
+            const btnCreateAlert = document.getElementById('btnCreateAlert');
+            const btnSendBrief = document.getElementById('btnSendBrief');
+            const btnCommitPlan = document.getElementById('btnCommitPlan');
+            
+            if (!btnCreateAlert || !btnSendBrief || !btnCommitPlan) return;
+            
+            function postJSON(url, body) {
+                return fetch(`${API_BASE}${url}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+            }
+            
+            function toast(message) {
+                const toastEl = document.createElement('div');
+                toastEl.style.cssText = 'position:fixed;top:20px;right:20px;padding:12px 20px;background:#10b981;color:white;border-radius:4px;z-index:10000;font-size:14px;';
+                toastEl.textContent = message;
+                document.body.appendChild(toastEl);
+                setTimeout(() => toastEl.remove(), 3000);
+            }
+            
+            btnCreateAlert.onclick = async () => {
+                const payload = {
+                    ticker: analysis.ticker || analysis.analysis?.ticker,
+                    rule: { type: 'price_cross', level: plan.entry_price || plan.target_price }
+                };
+                try {
+                    await postJSON('/alerts/create', payload);
+                    toast('✅ Alert created for entry level');
+                } catch (e) {
+                    toast('⚠️ Alert creation failed (stub endpoint)');
+                }
+            };
+            
+            btnSendBrief.onclick = async () => {
+                const memo = {
+                    ticker: analysis.ticker || analysis.analysis?.ticker,
+                    verdict: plan?.action || plan?.verdict || analysis?.strategy?.selected_arm,
+                    summary: analysis?.quick_take || plan?.reason || 'See evidence cards.',
+                    links: { decision: location.href }
+                };
+                try {
+                    await postJSON('/briefs/send', memo);
+                    toast('✅ Brief sent');
+                } catch (e) {
+                    toast('⚠️ Brief sending failed (stub endpoint)');
+                }
+            };
+            
+            btnCommitPlan.onclick = async () => {
+                const owner = document.getElementById('ownerSelect')?.value || 'me';
+                const due = document.getElementById('dueDate')?.value || null;
+                try {
+                    await postJSON('/decisions/commit', { analysis, plan, owner, due });
+                    toast('✅ Decision committed');
+                } catch (e) {
+                    toast('⚠️ Decision commit failed (stub endpoint)');
+                }
+            };
+        }
+
         // Render Plotly Price Chart
         function renderPriceChart(historyData) {
             debugLog(`renderPriceChart called with ${historyData?.data?.length || 0} data points`, 'info');
@@ -1840,6 +2128,28 @@
                                 📤 Export
                             </button>
                         </div>
+                        ${analysis.timestamp ? `
+                            <div style="font-size: 10px; color: var(--ft-text-light); margin-top: 8px; text-align: right;">
+                                Last updated: ${new Date(analysis.timestamp).toLocaleTimeString()} 
+                                (Age: ${Math.round((Date.now() - new Date(analysis.timestamp).getTime()) / 1000)}s)
+                            </div>
+                        ` : ''}
+                    </div>
+                    
+                    <!-- Action Slab: Assign, Due Date, Create Alert, Send Brief, Commit Plan -->
+                    <div class="action-slab" style="display: flex; align-items: center; gap: 12px; padding: 16px; background: white; border-radius: 8px; margin-bottom: 24px; flex-wrap: wrap;">
+                        <label style="font-size: 12px; font-weight: 600; color: var(--ft-text);">Owner:</label>
+                        <select id="ownerSelect" style="padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; background: white;">
+                            <option value="me">Me</option>
+                            <option value="desk">Desk</option>
+                            <option value="analyst">Analyst</option>
+                        </select>
+                        <label style="font-size: 12px; font-weight: 600; color: var(--ft-text);">Due:</label>
+                        <input id="dueDate" type="date" style="padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; background: white;"
+                               value="${new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}">
+                        <button id="btnCreateAlert" class="action-btn" style="padding: 8px 16px; font-size: 13px;">Create Alert</button>
+                        <button id="btnSendBrief" class="action-btn" style="padding: 8px 16px; font-size: 13px;">Send Brief</button>
+                        <button id="btnCommitPlan" class="action-btn primary" style="padding: 8px 16px; font-size: 13px; font-weight: 700;">Commit Plan</button>
                     </div>
                     
                     ${triggers.length > 0 ? `
@@ -2287,7 +2597,8 @@
                                     <div class="card-subtitle">30-Day Time Series with Moving Averages & Support/Resistance</div>
                                 </div>
                             </div>
-                            <div id="price-chart" class="chart-container"></div>
+                            <div id="panel-candles" style="height:420px; width:100%;"></div>
+                            <div id="price-chart" class="chart-container" style="display:none;"></div>
                             <div class="indicator-explanation">
                                 <h4>Technical Indicators Explained:</h4>
                                 <p><strong>SMA 20:</strong> 20-day Simple Moving Average - Short-term trend direction. Price above = bullish, below = bearish.</p>
@@ -2305,7 +2616,9 @@
                                     <div class="card-subtitle">Relative Strength Index - Overbought/Oversold Conditions</div>
                                 </div>
                             </div>
-                            <div id="rsi-chart" class="chart-container"></div>
+                            <div id="panel-car" style="height:280px; width:100%; margin-top: 24px;"></div>
+                            <div id="panel-rdist" style="height:280px; width:100%; margin-top: 24px;"></div>
+                            <div id="rsi-chart" class="chart-container" style="display:none;"></div>
                             <div class="indicator-explanation">
                                 <h4>RSI Explained:</h4>
                                 <p><strong>RSI > 70:</strong> Overbought - Stock may be due for a pullback. Consider selling or tightening stops.</p>
@@ -2406,7 +2719,7 @@
                                 </div>
                                 <div class="perf-stat">
                                     <div class="perf-label">Spread</div>
-                                    <div class="perf-value">$${market.spread?.toFixed(4) || 'N/A'}</div>
+                                    <div class="perf-value">${market.spread && market.price ? (market.spread / market.price * 10000).toFixed(0) + ' bps' : 'N/A'}</div>
                                 </div>
                                 <div class="perf-stat">
                                     <div class="perf-label">Volatility</div>
@@ -2506,53 +2819,21 @@
                 calibration: analysis.evidence?.calibration || null
             });
             
-            // Render charts after DOM is updated - use requestAnimationFrame for better timing
-            if (historyData && historyData.data && historyData.data.length > 0) {
-                // Wait for DOM to be fully rendered
-                requestAnimationFrame(() => {
-                    setTimeout(() => {
-                        console.log('Rendering charts with data:', {
-                            ticker: historyData.ticker,
-                            dataPoints: historyData.data.length,
-                            hasIndicators: !!historyData.indicators,
-                            sampleDate: historyData.data[0]?.date,
-                            sampleClose: historyData.data[0]?.close
-                        });
-                        
-                        // Verify chart containers exist
-                        const priceChartEl = document.getElementById('price-chart');
-                        const rsiChartEl = document.getElementById('rsi-chart');
-                        
-                        if (!priceChartEl || !rsiChartEl) {
-                            console.error('❌ Chart containers not found in DOM');
-                            return;
-                        }
-                        
-                        // Ensure containers have dimensions
-                        if (priceChartEl.offsetHeight === 0) {
-                            priceChartEl.style.height = '450px';
-                        }
-                        if (rsiChartEl.offsetHeight === 0) {
-                            rsiChartEl.style.height = '450px';
-                        }
-                        
-                        try {
-                            renderPriceChart(historyData);
-                            renderRSIChart(historyData);
-                            console.log('✅ Charts rendered successfully');
-                        } catch (chartError) {
-                            console.error('❌ Chart rendering error:', chartError);
-                            console.error('Stack trace:', chartError.stack);
-                        }
-                    }, 300); // Reduced delay but still enough for DOM
-                });
-            } else {
-                console.warn('⚠️ No history data available for charts:', {
-                    hasHistoryData: !!historyData,
-                    hasData: !!historyData?.data,
-                    dataLength: historyData?.data?.length || 0
-                });
-            }
+            // Wire action slab handlers
+            wireActionSlab(data, plan);
+            
+            // Render evidence panels after DOM is updated
+            requestAnimationFrame(() => {
+                setTimeout(() => {
+                    try {
+                        renderEvidencePanels(data);
+                        console.log('✅ Evidence panels rendered successfully');
+                    } catch (chartError) {
+                        console.error('❌ Chart rendering error:', chartError);
+                        console.error('Stack trace:', chartError.stack);
+                    }
+                }, 300);
+            });
         }
 
         function formatSignificanceBadge(pValue) {
