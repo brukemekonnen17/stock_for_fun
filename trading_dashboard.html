@@ -381,16 +381,24 @@
 
         /* Chart Container */
         .chart-container {
-            height: 400px;
             width: 100%;
+            min-width: 100%;
+            height: 450px;
+            min-height: 450px;
             margin-top: 16px;
-            background: white;
+            background: #FFFFFF;
             border-radius: 6px;
-            min-height: 400px;
             position: relative;
+            overflow: hidden;
         }
         
         .chart-container svg {
+            width: 100% !important;
+            height: 100% !important;
+        }
+        
+        /* Ensure Plotly container has dimensions */
+        .chart-container > div {
             width: 100% !important;
             height: 100% !important;
         }
