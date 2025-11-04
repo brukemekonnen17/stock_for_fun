@@ -35,7 +35,52 @@
       "timestamp": "2025-11-04T21:33:44.975402",
       "arm_name": "NEWS_SPIKE",
       "reward": null
+    },
+    {
+      "decision_id": "analyze-AAPL-1762310205",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-04T21:37:12.243698",
+      "arm_name": "NEWS_SPIKE",
+      "reward": null
+    },
+    {
+      "decision_id": "analyze-HTZ-1762310261",
+      "ticker": "HTZ",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-04T21:38:08.313529",
+      "arm_name": "NEWS_SPIKE",
+      "reward": null
+    },
+    {
+      "decision_id": "analyze-HTZ-1762310235",
+      "ticker": "HTZ",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-04T21:38:10.931441",
+      "arm_name": "SKIP",
+      "reward": null
+    },
+    {
+      "decision_id": "analyze-HTZ-1762310295",
+      "ticker": "HTZ",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-04T21:38:42.294121",
+      "arm_name": "EARNINGS_PRE",
+      "reward": null
+    },
+    {
+      "decision_id": "analyze-BYND-1762310343",
+      "ticker": "BYND",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-04T21:39:33.214835",
+      "arm_name": "SKIP",
+      "reward": null
     }
   ],
-  "last_updated": "2025-11-04T21:33:44.975436"
+  "last_updated": "2025-11-04T21:39:33.214991"
 }

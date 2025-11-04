@@ -1764,6 +1764,15 @@
             
             // Store current market price for what-if calculations
             const currentMarketPrice = market.price || plan.entry_price;
+            
+            // Subscribe state management (initialize all to false)
+            const subscribeState = {
+                rsi: false,
+                pricePosition: false,
+                socialMentions: false,
+                volumeSurge: false,
+                eventApproach: false
+            };
 
                 content.innerHTML = `
                     <!-- Decision Bar -->
