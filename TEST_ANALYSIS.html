@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Analysis Display</title>
+    <style>
+        body { font-family: monospace; padding: 20px; background: #1a1a1a; color: #fff; }
+        .test-box { background: #2a2a2a; padding: 15px; margin: 10px 0; border-radius: 8px; }
+        .success { color: #10b981; }
+        .error { color: #ef4444; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Analysis Display Test</h1>
+    
+    <div class="test-box">
+        <h2>1. Test API Call</h2>
+        <button onclick="testAPI()">Test /propose Endpoint</button>
+        <div id="api-result"></div>
+    </div>
+    
+    <div class="test-box">
+        <h2>2. Test Analysis Rendering</h2>
+        <button onclick="testRender()">Test Analysis HTML</button>
+        <div id="render-result"></div>
+    </div>
+    
+    <script>
+        async function testAPI() {
+            const result = document.getElementById('api-result');
+            result.innerHTML = '<p>Calling API...</p>';
+            
+            try {
+                const response = await fetch('http://127.0.0.1:8000/propose', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ticker: 'AAPL',
+                        price: 192.50,
+                        event_type: 'EARNINGS',
+                        days_to_event: 7,
+                        rank_components: {immediacy:0.6, materiality:0.6},
+                        expected_move: 0.04,
+                        backtest_kpis: {hit_rate:0.54, avg_win:0.012, avg_loss:-0.008},
+                        liquidity: 5000000000,
+                        spread: 0.01,
+                        context: [0.6, 0.6, 1.0, 0.4, 0.5, 0.04, 7]
+                    })
+                });
+                
+                const data = await response.json();
+                
+                result.innerHTML = `
+                    <p class="success">✅ API Call Success!</p>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                    <p><strong>Has analysis:</strong> ${data.analysis ? '<span class="success">YES</span>' : '<span class="error">NO</span>'}</p>
+                    ${data.analysis ? `
+                        <p><strong>Analysis keys:</strong> ${Object.keys(data.analysis).join(', ')}</p>
+                        <p><strong>Catalyst event:</strong> ${data.analysis.catalyst?.event_type || 'N/A'}</p>
+                        <p><strong>Strategy arm:</strong> ${data.analysis.strategy?.selected_arm || 'N/A'}</p>
+                        <p><strong>News count:</strong> ${data.analysis.news?.length || 0}</p>
+                    ` : ''}
+                `;
+            } catch (error) {
+                result.innerHTML = `<p class="error">❌ Error: ${error.message}</p>`;
+            }
+        }
+        
+        function testRender() {
+            const result = document.getElementById('render-result');
+            
+            const mockData = {
+                plan: { ticker: 'AAPL', entry_price: 192.00, stop_price: 189.50, target_price: 196.50 },
+                selected_arm: 'POST_EVENT_MOMO',
+                analysis: {
+                    ticker: 'AAPL',
+                    catalyst: {
+                        event_type: 'EARNINGS',
+                        days_to_event: 7.0,
+                        expected_move: 0.04,
+                        materiality: 0.6,
+                        rank: 82.3
+                    },
+                    strategy: {
+                        selected_arm: 'POST_EVENT_MOMO',
+                        reason: 'Post-event momentum favored',
+                        gating_facts: ['Expected move 4.0% ≥ 3%', 'Rank ≥ 70']
+                    },
+                    news: [
+                        { headline: 'AAPL earnings beat', timestamp: new Date().toISOString(), sentiment: 0.3 }
+                    ],
+                    history: {
+                        hit_rate: 0.53,
+                        samples: 120,
+                        avg_win: 0.012,
+                        avg_loss: -0.008
+                    },
+                    market: {
+                        price: 192.50,
+                        rsi14: 58.3,
+                        dollar_adv: 5000000000
+                    }
+                }
+            };
+            
+            // Test the template string
+            const plan = mockData.plan;
+            const arm = mockData.selected_arm;
+            const data = mockData;
+            
+            const testHTML = `
+                ${data.analysis ? `
+                    <div style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 10px; margin: 10px 0;">
+                        <h3>✅ Analysis Section Renders!</h3>
+                        <p><strong>Catalyst:</strong> ${data.analysis.catalyst?.event_type}</p>
+                        <p><strong>Strategy:</strong> ${data.analysis.strategy?.selected_arm}</p>
+                        <p><strong>Expected Move:</strong> ${((data.analysis.catalyst?.expected_move || 0) * 100).toFixed(1)}%</p>
+                    </div>
+                ` : '<p class="error">❌ Analysis check failed</p>'}
+            `;
+            
+            result.innerHTML = `
+                <p><strong>Test data.analysis check:</strong> ${data.analysis ? '<span class="success">PASSES</span>' : '<span class="error">FAILS</span>'}</p>
+                ${testHTML}
+            `;
+        }
+    </script>
+</body>
+</html>
+
