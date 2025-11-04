@@ -1010,6 +1010,13 @@
             const validDates = validIndices.map(i => dates[i]);
             const validCloses = validIndices.map(i => closes[i]);
             
+            // Additional validation: ensure we have at least 2 data points
+            if (validDates.length < 2 || validCloses.length < 2) {
+                console.error('❌ Insufficient valid data points for price chart');
+                chartElement.innerHTML = `<div style="padding: 20px; color: var(--ft-text-light);">Insufficient data: need at least 2 data points</div>`;
+                return;
+            }
+            
             const traces = [
                 {
                     x: validDates,
@@ -1017,7 +1024,8 @@
                     type: 'scatter',
                     mode: 'lines',
                     name: 'Close Price',
-                    line: { color: '#0050B3', width: 2 }
+                    line: { color: '#0050B3', width: 2 },
+                    hovertemplate: '<b>%{fullData.name}</b><br>Date: %{x}<br>Price: $%{y:.2f}<extra></extra>'
                 }
             ];
             
@@ -1104,6 +1112,17 @@
                 font: { family: 'Inter', size: 12, color: '#2E2E2E' }
             };
             
+            // Verify container exists and has dimensions
+            const containerHeight = chartElement.offsetHeight;
+            const containerWidth = chartElement.offsetWidth;
+            console.log('Container dimensions:', { width: containerWidth, height: containerHeight });
+            
+            if (containerHeight === 0 || containerWidth === 0) {
+                console.error('❌ Chart container has zero dimensions!');
+                chartElement.style.height = '450px';
+                chartElement.style.width = '100%';
+            }
+            
             try {
                 console.log('Rendering price chart with', traces.length, 'traces');
                 console.log('Sample trace data:', {
@@ -1111,18 +1130,31 @@
                     layout: layout
                 });
                 
+                // Clear any existing plot
+                Plotly.purge('price-chart');
+                
+                // Render with explicit config
                 Plotly.newPlot('price-chart', traces, layout, {
                     responsive: true,
                     displayModeBar: true,
                     displaylogo: false,
-                    modeBarButtonsToRemove: ['pan2d', 'lasso2d']
+                    modeBarButtonsToRemove: ['pan2d', 'lasso2d'],
+                    autosize: true,
+                    frameMargins: 0
                 });
+                
+                // Force resize after render
+                setTimeout(() => {
+                    Plotly.Plots.resize('price-chart');
+                }, 100);
                 
                 console.log('✅ Price chart rendered');
             } catch (error) {
                 console.error('❌ Error rendering price chart:', error);
                 console.error('Trace data:', traces);
                 console.error('Layout:', layout);
+                // Show error message in container
+                chartElement.innerHTML = `<div style="padding: 20px; color: red;">Chart rendering error: ${error.message}</div>`;
             }
         }
 
@@ -1157,18 +1189,26 @@
             }
             
             const rsiDates = rsiData.map(d => d.date);
-            const rsi = rsiData.map(d => d.rsi);
+            const rsi = rsiData.map(d => d.rsi).filter(v => v !== null && !isNaN(v) && isFinite(v));
+            
+            // Additional validation: ensure we have valid RSI data
+            if (rsiDates.length < 2 || rsi.length < 2) {
+                console.error('❌ Insufficient valid RSI data points');
+                chartElement.innerHTML = `<div style="padding: 20px; color: var(--ft-text-light);">Insufficient RSI data: need at least 2 data points</div>`;
+                return;
+            }
             
             const traces = [
                 {
-                    x: rsiDates,
+                    x: rsiDates.slice(0, rsi.length), // Match lengths
                     y: rsi,
                     type: 'scatter',
                     mode: 'lines',
                     name: 'RSI(14)',
                     line: { color: '#0050B3', width: 2 },
                     fill: 'tozeroy',
-                    fillcolor: 'rgba(0,80,179,0.1)'
+                    fillcolor: 'rgba(0,80,179,0.1)',
+                    hovertemplate: '<b>RSI(14)</b><br>Date: %{x}<br>RSI: %{y:.2f}<extra></extra>'
                 }
             ];
             
@@ -1220,6 +1260,17 @@
                 font: { family: 'Inter', size: 12, color: '#2E2E2E' }
             };
             
+            // Verify container exists and has dimensions
+            const containerHeight = chartElement.offsetHeight;
+            const containerWidth = chartElement.offsetWidth;
+            console.log('RSI Container dimensions:', { width: containerWidth, height: containerHeight });
+            
+            if (containerHeight === 0 || containerWidth === 0) {
+                console.error('❌ RSI Chart container has zero dimensions!');
+                chartElement.style.height = '450px';
+                chartElement.style.width = '100%';
+            }
+            
             try {
                 console.log('Rendering RSI chart with', traces.length, 'traces');
                 console.log('RSI data sample:', {
@@ -1229,18 +1280,31 @@
                     lastRSI: rsi[rsi.length - 1]
                 });
                 
+                // Clear any existing plot
+                Plotly.purge('rsi-chart');
+                
+                // Render with explicit config
                 Plotly.newPlot('rsi-chart', traces, layout, {
                     responsive: true,
                     displayModeBar: true,
                     displaylogo: false,
-                    modeBarButtonsToRemove: ['pan2d', 'lasso2d']
+                    modeBarButtonsToRemove: ['pan2d', 'lasso2d'],
+                    autosize: true,
+                    frameMargins: 0
                 });
+                
+                // Force resize after render
+                setTimeout(() => {
+                    Plotly.Plots.resize('rsi-chart');
+                }, 100);
                 
                 console.log('✅ RSI chart rendered');
             } catch (error) {
                 console.error('❌ Error rendering RSI chart:', error);
                 console.error('Trace data:', traces);
                 console.error('Layout:', layout);
+                // Show error message in container
+                chartElement.innerHTML = `<div style="padding: 20px; color: red;">Chart rendering error: ${error.message}</div>`;
             }
         }
 
@@ -1749,24 +1813,46 @@
                 calibration: analysis.evidence?.calibration || null
             });
             
-            // Render charts after DOM is updated
+            // Render charts after DOM is updated - use requestAnimationFrame for better timing
             if (historyData && historyData.data && historyData.data.length > 0) {
-                setTimeout(() => {
-                    console.log('Rendering charts with data:', {
-                        ticker: historyData.ticker,
-                        dataPoints: historyData.data.length,
-                        hasIndicators: !!historyData.indicators,
-                        sampleDate: historyData.data[0]?.date,
-                        sampleClose: historyData.data[0]?.close
-                    });
-                    try {
-                        renderPriceChart(historyData);
-                        renderRSIChart(historyData);
-                        console.log('✅ Charts rendered successfully');
-                    } catch (chartError) {
-                        console.error('❌ Chart rendering error:', chartError);
-                    }
-                }, 500); // Increased delay to ensure DOM is ready
+                // Wait for DOM to be fully rendered
+                requestAnimationFrame(() => {
+                    setTimeout(() => {
+                        console.log('Rendering charts with data:', {
+                            ticker: historyData.ticker,
+                            dataPoints: historyData.data.length,
+                            hasIndicators: !!historyData.indicators,
+                            sampleDate: historyData.data[0]?.date,
+                            sampleClose: historyData.data[0]?.close
+                        });
+                        
+                        // Verify chart containers exist
+                        const priceChartEl = document.getElementById('price-chart');
+                        const rsiChartEl = document.getElementById('rsi-chart');
+                        
+                        if (!priceChartEl || !rsiChartEl) {
+                            console.error('❌ Chart containers not found in DOM');
+                            return;
+                        }
+                        
+                        // Ensure containers have dimensions
+                        if (priceChartEl.offsetHeight === 0) {
+                            priceChartEl.style.height = '450px';
+                        }
+                        if (rsiChartEl.offsetHeight === 0) {
+                            rsiChartEl.style.height = '450px';
+                        }
+                        
+                        try {
+                            renderPriceChart(historyData);
+                            renderRSIChart(historyData);
+                            console.log('✅ Charts rendered successfully');
+                        } catch (chartError) {
+                            console.error('❌ Chart rendering error:', chartError);
+                            console.error('Stack trace:', chartError.stack);
+                        }
+                    }, 300); // Reduced delay but still enough for DOM
+                });
             } else {
                 console.warn('⚠️ No history data available for charts:', {
                     hasHistoryData: !!historyData,
