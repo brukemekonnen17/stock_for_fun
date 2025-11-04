@@ -8,7 +8,16 @@
       "timestamp": "2025-11-04T21:12:39.261340",
       "arm_name": "POST_EVENT_MOMO",
       "reward": null
+    },
+    {
+      "decision_id": "analyze-PCSA-1762309232",
+      "ticker": "PCSA",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-04T21:21:03.963581",
+      "arm_name": "REACTIVE",
+      "reward": null
     }
   ],
-  "last_updated": "2025-11-04T21:12:39.261432"
+  "last_updated": "2025-11-04T21:21:03.963680"
 }

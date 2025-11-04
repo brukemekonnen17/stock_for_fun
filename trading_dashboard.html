@@ -1240,14 +1240,20 @@
                 // Clear any existing plot
                 Plotly.purge('price-chart');
                 
-                // Render with explicit config
+                // Render with full controls (zoom, pan, reset, auto-scale)
                 Plotly.newPlot('price-chart', traces, layout, {
                     responsive: true,
                     displayModeBar: true,
                     displaylogo: false,
-                    modeBarButtonsToRemove: ['pan2d', 'lasso2d'],
-                    autosize: true,
-                    frameMargins: 0
+                    modeBarButtonsToRemove: ['lasso2d', 'select2d'],
+                    toImageButtonOptions: {
+                        format: 'png',
+                        filename: 'price_chart',
+                        height: 600,
+                        width: 1200,
+                        scale: 2
+                    },
+                    autosize: true
                 });
                 
                 // Force resize after render
@@ -1387,14 +1393,20 @@
                 // Clear any existing plot
                 Plotly.purge('rsi-chart');
                 
-                // Render with explicit config
+                // Render with full controls (zoom, pan, reset, auto-scale)
                 Plotly.newPlot('rsi-chart', traces, layout, {
                     responsive: true,
                     displayModeBar: true,
                     displaylogo: false,
-                    modeBarButtonsToRemove: ['pan2d', 'lasso2d'],
-                    autosize: true,
-                    frameMargins: 0
+                    modeBarButtonsToRemove: ['lasso2d', 'select2d'],
+                    toImageButtonOptions: {
+                        format: 'png',
+                        filename: 'rsi_chart',
+                        height: 600,
+                        width: 1200,
+                        scale: 2
+                    },
+                    autosize: true
                 });
                 
                 // Force resize after render
@@ -1567,36 +1579,69 @@
                     </div>
                     ` : ''}
 
-                    <!-- Executive Summary - Quick Decision Panel -->
-                    <div class="quick-summary">
-                        <div class="summary-grid">
-                            <div class="summary-item">
-                                <div class="summary-icon">${plan.action === 'BUY' ? '📈' : plan.action === 'SELL' ? '📉' : '⏸️'}</div>
-                                <div class="summary-label">Action</div>
-                                <div class="summary-value" style="color: ${plan.action === 'BUY' ? 'var(--ft-green)' : plan.action === 'SELL' ? 'var(--ft-red)' : 'var(--ft-text-light)'};">
-                                    ${plan.action}
-                                </div>
-                            </div>
-                            <div class="summary-item">
-                                <div class="summary-icon">${Math.round((plan.confidence || 0.5) * 100) > 70 ? '🎯' : Math.round((plan.confidence || 0.5) * 100) > 50 ? '⚡' : '⚠️'}</div>
-                                <div class="summary-label">Confidence</div>
-                                <div class="summary-value">${Math.round((plan.confidence || 0.5) * 100)}%</div>
-                            </div>
-                            <div class="summary-item">
-                                <div class="summary-icon">${(Math.abs((plan.target_price - market.price) / (market.price - plan.stop_price))).toFixed(1) > 2 ? '💎' : '⚖️'}</div>
-                                <div class="summary-label">Risk/Reward</div>
-                                <div class="summary-value">${(Math.abs((plan.target_price - market.price) / (market.price - plan.stop_price))).toFixed(1)}:1</div>
-                            </div>
-                            <div class="summary-item">
-                                <div class="summary-icon">${catalyst.days_to_event < 7 ? '🔥' : catalyst.days_to_event < 30 ? '📅' : '🕐'}</div>
-                                <div class="summary-label">Event</div>
-                                <div class="summary-value">${Math.round(catalyst.days_to_event)} days</div>
+                    <!-- Evidence & Statistical Analysis - MOVED UP (FT Style) -->
+                    ${analysis.evidence ? `
+                    <div class="card" style="border-left: 4px solid var(--ft-purple); margin-bottom: 24px;">
+                        <div class="card-header">
+                            <div>
+                                <div class="card-title">Evidence & Statistical Tests</div>
+                                <div class="card-subtitle">Rigorous Analysis with Uncertainty Quantification</div>
                             </div>
                         </div>
-                        <div style="margin-top: 16px; padding: 16px; background: white; border-radius: 8px; font-size: 14px; line-height: 1.6;">
-                            <strong>💡 Quick Take:</strong> ${plan.reason?.substring(0, 200) || 'No reasoning available'}${plan.reason?.length > 200 ? '...' : ''}
+                        <div class="evidence-panel">
+                            ${analysis.evidence.tests && analysis.evidence.tests.length > 0 ? analysis.evidence.tests.slice(0, 3).map((test, idx) => {
+                                const badge = test.p_value !== null ? formatSignificanceBadge(test.p_value) : '';
+                                const grade = computeEffectGrade(test.p_value, test.effect_size);
+                                return `
+                                    <div class="evidence-test">
+                                        <div class="evidence-header">
+                                            <span class="evidence-name">${test.name}</span>
+                                            <span class="evidence-badge ${grade}">${grade}</span>
+                                            ${badge ? `<span class="significance-badge">${badge}</span>` : ''}
+                                        </div>
+                                        <div class="evidence-hypothesis">${test.hypothesis}</div>
+                                        ${test.effect_size !== null ? `
+                                            <div class="evidence-effect">
+                                                <span class="effect-label">Effect:</span>
+                                                <span class="effect-value">${test.effect_size.toFixed(3)}</span>
+                                                ${test.ci_low !== null && test.ci_high !== null ? `
+                                                    <span class="effect-ci">[${test.ci_low.toFixed(3)}, ${test.ci_high.toFixed(3)}]</span>
+                                                ` : ''}
+                                            </div>
+                                        ` : ''}
+                                        ${test.p_value !== null ? `
+                                            <div class="evidence-pvalue">
+                                                <span class="pvalue-label">p-value:</span>
+                                                <span class="pvalue-value ${test.p_value < 0.05 ? 'significant' : ''}">${test.p_value.toFixed(4)}</span>
+                                            </div>
+                                        ` : ''}
+                                    </div>
+                                `;
+                            }).join('') : '<div style="padding: 20px; text-align: center; color: var(--ft-text-light);">No statistical tests available</div>'}
+                            
+                            ${analysis.evidence && analysis.evidence.calibration ? `
+                                <div class="calibration-metrics">
+                                    <div class="calibration-item">
+                                        <span class="calibration-label">ECE:</span>
+                                        <span class="calibration-value">${(analysis.evidence.calibration.ece || 0).toFixed(3)}</span>
+                                    </div>
+                                    <div class="calibration-item">
+                                        <span class="calibration-label">Brier:</span>
+                                        <span class="calibration-value">${(analysis.evidence.calibration.brier || 0).toFixed(3)}</span>
+                                    </div>
+                                    <div class="calibration-item">
+                                        <span class="calibration-label">Samples:</span>
+                                        <span class="calibration-value">${analysis.evidence.calibration.n_samples || 0}</span>
+                                    </div>
+                                    <div class="calibration-item">
+                                        <span class="calibration-label">Confidence:</span>
+                                        <span class="calibration-value">${(analysis.evidence.calibration.calibrated_confidence * 100 || 50).toFixed(1)}%</span>
+                                    </div>
+                                </div>
+                            ` : ''}
                         </div>
                     </div>
+                    ` : ''}
 
                     <!-- Quick Insight Cards Grid -->
                     <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 24px;">
@@ -1849,83 +1894,6 @@
                             </div>
                         </div>
 
-                        <!-- Evidence Analysis -->
-                        ${analysis.evidence ? `
-                        <div class="card" style="border-left: 4px solid var(--ft-purple);">
-                            <div class="card-header">
-                                <div>
-                                    <div class="card-title">Evidence & Statistical Tests</div>
-                                    <div class="card-subtitle">Rigorous Analysis with Uncertainty Quantification</div>
-                                </div>
-                            </div>
-                            <div class="evidence-panel">
-                                ${analysis.evidence.tests && analysis.evidence.tests.length > 0 ? analysis.evidence.tests.map((test, idx) => {
-                                    const badge = test.p_value !== null ? formatSignificanceBadge(test.p_value) : '';
-                                    const grade = computeEffectGrade(test.p_value, test.effect_size);
-                                    return `
-                                        <div class="evidence-test">
-                                            <div class="evidence-header">
-                                                <span class="evidence-name">${test.name}</span>
-                                                <span class="evidence-badge ${grade}">${grade}</span>
-                                                ${badge ? `<span class="significance-badge">${badge}</span>` : ''}
-                                            </div>
-                                            <div class="evidence-hypothesis">${test.hypothesis}</div>
-                                            ${test.effect_size !== null ? `
-                                                <div class="evidence-effect">
-                                                    <span class="effect-label">Effect Size:</span>
-                                                    <span class="effect-value">${test.effect_size.toFixed(3)}</span>
-                                                    ${test.ci_low !== null && test.ci_high !== null ? `
-                                                        <span class="effect-ci">[${test.ci_low.toFixed(3)}, ${test.ci_high.toFixed(3)}]</span>
-                                                    ` : ''}
-                                                </div>
-                                            ` : ''}
-                                            ${test.p_value !== null ? `
-                                                <div class="evidence-pvalue">
-                                                    <span class="pvalue-label">p-value:</span>
-                                                    <span class="pvalue-value ${test.p_value < 0.05 ? 'significant' : ''}">${test.p_value.toFixed(4)}</span>
-                                                </div>
-                                            ` : ''}
-                                            ${test.notes ? `<div class="evidence-notes">${test.notes}</div>` : ''}
-                                        </div>
-                                    `;
-                                }).join('') : '<div style="padding: 20px; text-align: center; color: var(--ft-text-light);">No statistical tests available</div>'}
-                                
-                                ${analysis.evidence && analysis.evidence.calibration ? `
-                                    <div class="calibration-metrics">
-                                        <div class="calibration-item">
-                                            <span class="calibration-label">ECE:</span>
-                                            <span class="calibration-value">${(analysis.evidence.calibration.ece || 0).toFixed(3)}</span>
-                                        </div>
-                                        <div class="calibration-item">
-                                            <span class="calibration-label">Brier Score:</span>
-                                            <span class="calibration-value">${(analysis.evidence.calibration.brier || 0).toFixed(3)}</span>
-                                        </div>
-                                        ${analysis.evidence.calibration.n_samples !== undefined ? `
-                                        <div class="calibration-item">
-                                            <span class="calibration-label">Samples:</span>
-                                            <span class="calibration-value">${analysis.evidence.calibration.n_samples}</span>
-                                        </div>
-                                        ` : ''}
-                                        ${analysis.evidence.calibration.raw_confidence !== undefined && analysis.evidence.calibration.calibrated_confidence !== undefined ? `
-                                        <div class="calibration-item" style="grid-column: 1 / -1; padding-top: 12px; border-top: 1px solid var(--ft-border);">
-                                            <span class="calibration-label">Confidence:</span>
-                                            <span class="calibration-value">
-                                                Raw: ${(analysis.evidence.calibration.raw_confidence * 100).toFixed(1)}% → 
-                                                Calibrated: ${(analysis.evidence.calibration.calibrated_confidence * 100).toFixed(1)}%
-                                            </span>
-                                        </div>
-                                        ` : ''}
-                                    </div>
-                                ` : ''}
-                                
-                                ${analysis.evidence && analysis.evidence.assumptions && analysis.evidence.assumptions.missing && analysis.evidence.assumptions.missing.length > 0 ? `
-                                    <div class="assumptions-warning">
-                                        <strong>Missing Data:</strong> ${analysis.evidence.assumptions.missing.join(', ')}
-                                    </div>
-                                ` : ''}
-                            </div>
-                        </div>
-                        ` : ''}
                     </div>
                 </div>
             `;
