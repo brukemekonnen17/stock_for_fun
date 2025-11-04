@@ -264,50 +264,107 @@
             margin-top: 4px;
         }
 
-        /* Surge Analysis Card */
-        .surge-analysis {
-            background: linear-gradient(135deg, rgba(0,166,81,0.1) 0%, rgba(0,80,179,0.1) 100%);
-            border-left: 4px solid var(--ft-green);
-            padding: 24px;
-            border-radius: 8px;
-        }
-
-        .surge-score {
-            font-size: 64px;
-            font-weight: 700;
-            font-family: 'Playfair Display', serif;
-            text-align: center;
-            margin: 20px 0;
-        }
-
-        .surge-score.high { color: var(--ft-green); }
-        .surge-score.moderate { color: var(--ft-orange); }
-        .surge-score.low { color: var(--ft-text-light); }
-
-        .room-to-run {
+        /* Key Metrics Bar - Investor-grade */
+        .key-metrics-bar {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 16px;
-            margin-top: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 1px;
+            background: var(--ft-border);
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 24px;
         }
 
-        .room-metric {
-            padding: 16px;
+        .metric-item {
             background: white;
-            border-radius: 6px;
+            padding: 16px;
             text-align: center;
+            transition: background 0.2s;
         }
 
-        .room-label {
-            font-size: 12px;
+        .metric-item:hover {
+            background: var(--ft-surface);
+        }
+
+        .metric-label {
+            font-size: 11px;
+            text-transform: uppercase;
             color: var(--ft-text-light);
+            margin-bottom: 6px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .metric-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--ft-primary);
+            font-family: 'Playfair Display', serif;
+        }
+
+        .metric-value.positive { color: var(--ft-green); }
+        .metric-value.negative { color: var(--ft-red); }
+        .metric-value.neutral { color: var(--ft-text); }
+
+        /* Compact Risk/Reward Panel */
+        .risk-reward-panel {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            gap: 20px;
+            align-items: center;
+            padding: 20px;
+            background: linear-gradient(135deg, rgba(0,166,81,0.05) 0%, rgba(220,20,60,0.05) 100%);
+            border-radius: 8px;
+            margin-bottom: 24px;
+        }
+
+        .upside-box {
+            text-align: right;
+            padding-right: 20px;
+            border-right: 2px solid var(--ft-green);
+        }
+
+        .downside-box {
+            text-align: left;
+            padding-left: 20px;
+            border-left: 2px solid var(--ft-red);
+        }
+
+        .risk-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            font-weight: 600;
+            letter-spacing: 0.5px;
             margin-bottom: 8px;
         }
 
-        .room-value {
-            font-size: 24px;
+        .risk-value {
+            font-size: 32px;
             font-weight: 700;
             font-family: 'Playfair Display', serif;
+        }
+
+        .upside-box .risk-label { color: var(--ft-green); }
+        .upside-box .risk-value { color: var(--ft-green); }
+        .downside-box .risk-label { color: var(--ft-red); }
+        .downside-box .risk-value { color: var(--ft-red); }
+
+        .risk-ratio {
+            text-align: center;
+        }
+
+        .risk-ratio-value {
+            font-size: 48px;
+            font-weight: 700;
+            font-family: 'Playfair Display', serif;
+            color: var(--ft-accent);
+        }
+
+        .risk-ratio-label {
+            font-size: 12px;
+            color: var(--ft-text-light);
+            text-transform: uppercase;
+            font-weight: 600;
         }
 
         /* Pattern vs Catalyst Comparison */
@@ -1416,142 +1473,163 @@
             const alignment = (patternExpectation.includes('Breakout') && catalyst.days_to_event < 7) ? 'ALIGNED' :
                              (patternExpectation.includes('Bounce') && catalyst.days_to_event < 30) ? 'ALIGNED' : 'MISALIGNED';
 
-            content.innerHTML = `
-                <!-- Decision Bar -->
-                <div class="decision-bar">
-                    <div class="verdict-badge ${plan.action}">${plan.action}</div>
-                    <div>
-                        <div class="ticker-display">${ticker}</div>
-                        <div style="font-size: 14px; opacity: 0.8; margin-top: 4px;">${strategy.reason || 'No strategy rationale available'}</div>
-                    </div>
-                    <div class="confidence-meter">
-                        <div class="confidence-value">${Math.round((plan.confidence || analysis.llm_confidence || 0.5) * 100)}%</div>
-                        <div class="confidence-label">Confidence</div>
-                        <div class="confidence-bar">
-                            <div class="confidence-fill" style="width: ${(plan.confidence || analysis.llm_confidence || 0.5) * 100}%"></div>
-                        </div>
-                    </div>
-                    <div style="text-align: right;">
-                        <div style="font-size: 32px; font-weight: 700; font-family: 'Playfair Display', serif;">$${market.price?.toFixed(2) || plan.entry_price?.toFixed(2) || 'N/A'}</div>
-                        <div style="font-size: 12px; opacity: 0.8; margin-top: 4px;">Current Price</div>
-                    </div>
-                </div>
-
-                <!-- Surge Analysis Card -->
-                ${surgeData ? `
-                <div class="surge-analysis">
-                    <div class="card-header">
+                content.innerHTML = `
+                    <!-- Decision Bar -->
+                    <div class="decision-bar">
+                        <div class="verdict-badge ${plan.action}">${plan.action}</div>
                         <div>
-                            <div class="card-title">Surge Potential & Room to Run</div>
-                            <div class="card-subtitle">Price Increase & Intraday Play Analysis</div>
+                            <div class="ticker-display">${ticker}</div>
+                            <div style="font-size: 14px; opacity: 0.8; margin-top: 4px;">${strategy.reason || 'No strategy rationale available'}</div>
+                        </div>
+                        <div class="confidence-meter">
+                            <div class="confidence-value">${Math.round((plan.confidence || analysis.llm_confidence || 0.5) * 100)}%</div>
+                            <div class="confidence-label">Confidence</div>
+                            <div class="confidence-bar">
+                                <div class="confidence-fill" style="width: ${(plan.confidence || analysis.llm_confidence || 0.5) * 100}%"></div>
+                            </div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-size: 32px; font-weight: 700; font-family: 'Playfair Display', serif;">$${market.price?.toFixed(2) || plan.entry_price?.toFixed(2) || 'N/A'}</div>
+                            <div style="font-size: 12px; opacity: 0.8; margin-top: 4px;">Current Price</div>
                         </div>
                     </div>
-                    <div class="surge-score ${surgeData.recommendation === 'HIGH_POTENTIAL' ? 'high' : surgeData.recommendation === 'MODERATE' ? 'moderate' : 'low'}">
-                        ${surgeData.surge_score}/100
-                    </div>
-                    <div style="text-align: center; margin-bottom: 20px;">
-                        <span style="font-size: 18px; font-weight: 600;">${surgeData.recommendation}</span>
-                    </div>
-                    <div class="room-to-run">
-                        <div class="room-metric">
-                            <div class="room-label">Upside to Resistance</div>
-                            <div class="room-value" style="color: var(--ft-green);">+${surgeData.room_to_run.upside_to_resistance.toFixed(1)}%</div>
-                        </div>
-                        <div class="room-metric">
-                            <div class="room-label">Intraday Potential</div>
-                            <div class="room-value" style="color: var(--ft-orange);">±${surgeData.room_to_run.intraday_potential_pct.toFixed(1)}%</div>
-                        </div>
-                        <div class="room-metric">
-                            <div class="room-label">Price Position</div>
-                            <div class="room-value">${surgeData.room_to_run.price_position.toFixed(1)}%</div>
-                        </div>
-                        <div class="room-metric">
-                            <div class="room-label">Volume Surge</div>
-                            <div class="room-value">${surgeData.momentum.volume_surge.toFixed(2)}x</div>
-                        </div>
-                    </div>
-                </div>
-                ` : ''}
 
-                <!-- Pattern vs Catalyst Comparison -->
-                <div class="card">
-                    <div class="card-header">
-                        <div>
-                            <div class="card-title">Pattern vs Catalyst Analysis</div>
-                            <div class="card-subtitle">What We See vs What We Expect</div>
+                    <!-- Key Metrics Bar - Investor Grade -->
+                    <div class="key-metrics-bar">
+                        <div class="metric-item">
+                            <div class="metric-label">Market Cap</div>
+                            <div class="metric-value">$${(market.dollar_adv / 0.02).toFixed(1)}B</div>
                         </div>
-                        <div style="padding: 8px 16px; background: ${alignment === 'ALIGNED' ? 'var(--ft-green)' : 'var(--ft-orange)'}; color: white; border-radius: 4px; font-size: 12px; font-weight: 600;">
-                            ${alignment}
+                        <div class="metric-item">
+                            <div class="metric-label">Avg Volume</div>
+                            <div class="metric-value">${(market.dollar_adv / market.price / 1_000_000).toFixed(1)}M</div>
                         </div>
-                    </div>
-                    <div class="comparison-grid">
-                        <div class="comparison-panel">
-                            <div class="comparison-title">📈 Technical Pattern</div>
-                            <div class="comparison-item">
-                                <span class="comparison-label">Price Position</span>
-                                <span class="comparison-value">${pricePosition.toFixed(1)}%</span>
-                            </div>
-                            <div class="comparison-item">
-                                <span class="comparison-label">Breakout Status</span>
-                                <span class="comparison-value">${plan.breakout_flag ? '✓ Breakout' : 'No Breakout'}</span>
-                            </div>
-                            <div class="comparison-item">
-                                <span class="comparison-label">Volume Surge</span>
-                                <span class="comparison-value">${volumeSurge.toFixed(2)}x</span>
-                            </div>
-                            <div class="comparison-item">
-                                <span class="comparison-label">RSI(14)</span>
-                                <span class="comparison-value">${market.rsi14?.toFixed(1) || 'N/A'}</span>
-                            </div>
-                            <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--ft-border);">
-                                <strong>Expectation:</strong> ${patternExpectation}
-                            </div>
+                        <div class="metric-item">
+                            <div class="metric-label">Vol Surge</div>
+                            <div class="metric-value ${volumeSurge > 1.5 ? 'positive' : 'neutral'}">${volumeSurge.toFixed(2)}x</div>
                         </div>
-                        <div class="comparison-panel">
-                            <div class="comparison-title">🎯 Catalyst Event</div>
-                            <div class="comparison-item">
-                                <span class="comparison-label">Event Type</span>
-                                <span class="comparison-value">${catalyst.event_type || 'N/A'}</span>
-                            </div>
-                            <div class="comparison-item">
-                                <span class="comparison-label">Days to Event</span>
-                                <span class="comparison-value">${Math.round(catalyst.days_to_event || 0)}</span>
-                            </div>
-                            <div class="comparison-item">
-                                <span class="comparison-label">Expected Move</span>
-                                <span class="comparison-value">${expectedMove.toFixed(1)}%</span>
-                            </div>
-                            <div class="comparison-item">
-                                <span class="comparison-label">Materiality</span>
-                                <span class="comparison-value">${materiality.toFixed(0)}%</span>
-                            </div>
-                            <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--ft-border);">
-                                <strong>Expectation:</strong> ${catalystExpectation}
-                            </div>
+                        <div class="metric-item">
+                            <div class="metric-label">Intraday Range</div>
+                            <div class="metric-value neutral">±${surgeData ? surgeData.room_to_run.intraday_potential_pct.toFixed(1) : '0.0'}%</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">Price Position</div>
+                            <div class="metric-value neutral">${pricePosition.toFixed(0)}%</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">RSI(14)</div>
+                            <div class="metric-value ${market.rsi14 > 70 ? 'negative' : market.rsi14 < 30 ? 'positive' : 'neutral'}">${market.rsi14?.toFixed(0) || 'N/A'}</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">Event in</div>
+                            <div class="metric-value neutral">${Math.round(catalyst.days_to_event || 0)}d</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">Social Signal</div>
+                            <div class="metric-value ${memeSignal ? 'positive' : 'neutral'}">${social.mention_count_total || 0}</div>
                         </div>
                     </div>
-                </div>
 
-                <!-- Meme Signal Indicator -->
-                ${memeSignal ? `
-                <div class="meme-signal active">
-                    <div class="meme-icon">🚀</div>
-                    <div class="meme-text">MEME/SOCIAL MOMENTUM DETECTED</div>
-                    <div style="margin-top: 12px; font-size: 14px;">
-                        High social media activity (${social.mention_count_total || surgeData?.social?.mention_count || 0} mentions) 
-                        with ${((social.sentiment_score || surgeData?.social?.sentiment_score || 0) * 100).toFixed(1)}% positive sentiment.
-                        This may be driving price action independent of fundamentals.
+                    <!-- Compact Risk/Reward Panel -->
+                    <div class="risk-reward-panel">
+                        <div class="upside-box">
+                            <div class="risk-label">Upside Target</div>
+                            <div class="risk-value">+${((plan.target_price - market.price) / market.price * 100).toFixed(1)}%</div>
+                            <div style="font-size: 14px; color: var(--ft-text-light); margin-top: 4px;">$${plan.target_price?.toFixed(2)}</div>
+                        </div>
+                        <div class="risk-ratio">
+                            <div class="risk-ratio-value">${(Math.abs((plan.target_price - market.price) / (market.price - plan.stop_price))).toFixed(1)}:1</div>
+                            <div class="risk-ratio-label">Risk/Reward</div>
+                        </div>
+                        <div class="downside-box">
+                            <div class="risk-label">Downside Risk</div>
+                            <div class="risk-value">${((plan.stop_price - market.price) / market.price * 100).toFixed(1)}%</div>
+                            <div style="font-size: 14px; color: var(--ft-text-light); margin-top: 4px;">$${plan.stop_price?.toFixed(2)}</div>
+                        </div>
                     </div>
-                </div>
-                ` : social.mention_count_total > 20 ? `
-                <div class="meme-signal">
-                    <div class="meme-icon">📱</div>
-                    <div class="meme-text">Moderate Social Activity</div>
-                    <div style="margin-top: 12px; font-size: 14px;">
-                        ${social.mention_count_total || 0} mentions detected. Monitoring for momentum signals.
+
+                    ${memeSignal ? `
+                    <div style="background: linear-gradient(135deg, rgba(255,215,0,0.1) 0%, rgba(255,69,0,0.1) 100%); 
+                                border-left: 4px solid #FFD700; padding: 16px; border-radius: 8px; margin-bottom: 24px;
+                                display: flex; align-items: center; gap: 16px;">
+                        <div style="font-size: 32px;">🚀</div>
+                        <div style="flex: 1;">
+                            <div style="font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">
+                                Meme/Social Momentum Detected
+                            </div>
+                            <div style="font-size: 13px; color: var(--ft-text-light);">
+                                ${social.mention_count_total || 0} mentions • ${((social.sentiment_score || 0) * 100).toFixed(0)}% positive sentiment
+                            </div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-size: 24px; font-weight: 700; color: #FFD700;">HIGH RISK</div>
+                        </div>
                     </div>
-                </div>
-                ` : ''}
+                    ` : ''}
+
+                    <!-- Executive Summary - Quick Decision Panel -->
+                    <div class="quick-summary">
+                        <div class="summary-grid">
+                            <div class="summary-item">
+                                <div class="summary-icon">${plan.action === 'BUY' ? '📈' : plan.action === 'SELL' ? '📉' : '⏸️'}</div>
+                                <div class="summary-label">Action</div>
+                                <div class="summary-value" style="color: ${plan.action === 'BUY' ? 'var(--ft-green)' : plan.action === 'SELL' ? 'var(--ft-red)' : 'var(--ft-text-light)'};">
+                                    ${plan.action}
+                                </div>
+                            </div>
+                            <div class="summary-item">
+                                <div class="summary-icon">${Math.round((plan.confidence || 0.5) * 100) > 70 ? '🎯' : Math.round((plan.confidence || 0.5) * 100) > 50 ? '⚡' : '⚠️'}</div>
+                                <div class="summary-label">Confidence</div>
+                                <div class="summary-value">${Math.round((plan.confidence || 0.5) * 100)}%</div>
+                            </div>
+                            <div class="summary-item">
+                                <div class="summary-icon">${(Math.abs((plan.target_price - market.price) / (market.price - plan.stop_price))).toFixed(1) > 2 ? '💎' : '⚖️'}</div>
+                                <div class="summary-label">Risk/Reward</div>
+                                <div class="summary-value">${(Math.abs((plan.target_price - market.price) / (market.price - plan.stop_price))).toFixed(1)}:1</div>
+                            </div>
+                            <div class="summary-item">
+                                <div class="summary-icon">${catalyst.days_to_event < 7 ? '🔥' : catalyst.days_to_event < 30 ? '📅' : '🕐'}</div>
+                                <div class="summary-label">Event</div>
+                                <div class="summary-value">${Math.round(catalyst.days_to_event)} days</div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 16px; padding: 16px; background: white; border-radius: 8px; font-size: 14px; line-height: 1.6;">
+                            <strong>💡 Quick Take:</strong> ${plan.reason?.substring(0, 200) || 'No reasoning available'}${plan.reason?.length > 200 ? '...' : ''}
+                        </div>
+                    </div>
+
+                    <!-- Quick Insight Cards Grid -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 24px;">
+                        <div class="card" style="padding: 16px;">
+                            <div style="font-size: 11px; text-transform: uppercase; color: var(--ft-text-light); margin-bottom: 8px; font-weight: 600;">
+                                Pattern Signal
+                            </div>
+                            <div style="font-size: 20px; font-weight: 700; margin-bottom: 8px;">
+                                ${plan.breakout_flag ? '📈 Breakout' : pricePosition > 0.7 ? '⚠️ Resistance' : pricePosition < 0.3 ? '✅ Support' : '➡️ Neutral'}
+                            </div>
+                            <div style="font-size: 12px; color: var(--ft-text-light);">${patternExpectation}</div>
+                        </div>
+                        <div class="card" style="padding: 16px;">
+                            <div style="font-size: 11px; text-transform: uppercase; color: var(--ft-text-light); margin-bottom: 8px; font-weight: 600;">
+                                Catalyst Event
+                            </div>
+                            <div style="font-size: 20px; font-weight: 700; margin-bottom: 8px;">
+                                ${catalyst.event_type || 'N/A'}
+                            </div>
+                            <div style="font-size: 12px; color: var(--ft-text-light);">
+                                ${Math.round(catalyst.days_to_event || 0)} days • ${expectedMove.toFixed(1)}% expected move
+                            </div>
+                        </div>
+                        <div class="card" style="padding: 16px;">
+                            <div style="font-size: 11px; text-transform: uppercase; color: var(--ft-text-light); margin-bottom: 8px; font-weight: 600;">
+                                Alignment
+                            </div>
+                            <div style="font-size: 20px; font-weight: 700; margin-bottom: 8px; color: ${alignment === 'ALIGNED' ? 'var(--ft-green)' : 'var(--ft-orange)'};">
+                                ${alignment === 'ALIGNED' ? '✓ Aligned' : '⚠️ Misaligned'}
+                            </div>
+                            <div style="font-size: 12px; color: var(--ft-text-light);">Pattern vs Catalyst</div>
+                        </div>
+                    </div>
 
                 <!-- Main Analytics Grid -->
                 <div class="analytics-grid">
