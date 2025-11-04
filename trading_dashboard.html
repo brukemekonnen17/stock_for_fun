@@ -2179,11 +2179,42 @@
                                                 <span class="pvalue-value ${test.p_value < 0.05 ? 'significant' : ''}">${test.p_value.toFixed(4)}</span>
                                             </div>
                                         ` : ''}
-                                        ${test.decision_implication ? `
-                                            <div class="evidence-decision" style="margin-top: 12px; padding: 12px; background: ${test.decision_implication.includes('✅') ? 'rgba(0,166,81,0.1)' : test.decision_implication.includes('❌') ? 'rgba(220,20,60,0.1)' : 'rgba(128,128,128,0.1)'}; border-radius: 4px; font-size: 13px; line-height: 1.5; font-weight: 500;">
-                                                <strong style="color: ${test.decision_implication.includes('✅') ? 'var(--ft-green)' : test.decision_implication.includes('❌') ? 'var(--ft-red)' : 'var(--ft-text-light)'};">
-                                                    📊 TRADING DECISION:
-                                                </strong>
+                                        ${test.decision_label ? `
+                                            <div class="evidence-decision" style="margin-top: 12px;">
+                                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                                                    <span class="decision-chip decision-chip-${test.decision_color || 'blue'}" style="
+                                                        padding: 4px 12px;
+                                                        border-radius: 4px;
+                                                        font-size: 12px;
+                                                        font-weight: 700;
+                                                        text-transform: uppercase;
+                                                        background: ${test.decision_color === 'green' ? 'rgba(0,166,81,0.15)' : 
+                                                                    test.decision_color === 'red' ? 'rgba(220,20,60,0.15)' : 
+                                                                    test.decision_color === 'yellow' ? 'rgba(255,193,7,0.15)' : 
+                                                                    'rgba(66,133,244,0.15)'};
+                                                        color: ${test.decision_color === 'green' ? 'var(--ft-green)' : 
+                                                                test.decision_color === 'red' ? 'var(--ft-red)' : 
+                                                                test.decision_color === 'yellow' ? '#FFC107' : 
+                                                                'var(--ft-blue)'};
+                                                        border: 1px solid ${test.decision_color === 'green' ? 'var(--ft-green)' : 
+                                                                        test.decision_color === 'red' ? 'var(--ft-red)' : 
+                                                                        test.decision_color === 'yellow' ? '#FFC107' : 
+                                                                        'var(--ft-blue)'};
+                                                    ">
+                                                        ${test.decision_label || 'CONFIRM'}
+                                                    </span>
+                                                    ${test.decision_severity === 'high' ? '<span style="font-size: 10px; color: var(--ft-red);">⚠️ HIGH</span>' : ''}
+                                                </div>
+                                                <div style="padding: 10px; background: ${test.decision_color === 'green' ? 'rgba(0,166,81,0.08)' : 
+                                                                                            test.decision_color === 'red' ? 'rgba(220,20,60,0.08)' : 
+                                                                                            test.decision_color === 'yellow' ? 'rgba(255,193,7,0.08)' : 
+                                                                                            'rgba(66,133,244,0.08)'}; border-radius: 4px; font-size: 13px; line-height: 1.5; color: var(--ft-text);">
+                                                    ${test.decision_implication || 'No decision rationale available.'}
+                                                </div>
+                                            </div>
+                                        ` : test.decision_implication ? `
+                                            <div class="evidence-decision" style="margin-top: 12px; padding: 12px; background: rgba(128,128,128,0.1); border-radius: 4px; font-size: 13px; line-height: 1.5;">
+                                                <strong>📊 TRADING DECISION:</strong>
                                                 <div style="margin-top: 6px; color: var(--ft-text);">
                                                     ${test.decision_implication}
                                                 </div>

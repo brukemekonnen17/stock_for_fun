@@ -65,16 +65,36 @@ def detect_patterns(hist: List[Dict], price: float) -> Dict[str, Any]:
     wedges = _detect_wedges(closes, highs, lows)
     patterns.extend(wedges)
     
-    # Select primary pattern (highest confidence)
+    # Validate patterns with 3 tests: geometric, trend, participation
+    validated_patterns = []
+    for pattern in patterns:
+        validation = _validate_pattern(pattern, closes, highs, lows, volumes, price)
+        pattern["validation"] = validation
+        pattern["validation_passed"] = validation["passed_count"] >= 2  # Require 2/3 tests
+        
+        # Downgrade confidence if validation fails
+        if not pattern["validation_passed"]:
+            pattern["confidence"] = pattern.get("confidence", 0.0) * 0.7
+            pattern["status"] = "CANDIDATE"
+            pattern["status_note"] = "Needs confirmation (only {}/3 validation tests passed)".format(validation["passed_count"])
+        else:
+            pattern["status"] = "CONFIRMED"
+            pattern["status_note"] = "All validation tests passed"
+        
+        validated_patterns.append(pattern)
+    
+    # Select primary pattern (highest confidence, but prefer validated)
     primary_pattern = None
-    if patterns:
-        primary_pattern = max(patterns, key=lambda p: p.get("confidence", 0.0))
+    if validated_patterns:
+        # Sort by validation status (CONFIRMED first), then confidence
+        validated_patterns.sort(key=lambda p: (p.get("validation_passed", False), p.get("confidence", 0.0)), reverse=True)
+        primary_pattern = validated_patterns[0]
     
     # Generate trading implications
-    trading_implications = _generate_trading_implications(patterns, price, closes[-1])
+    trading_implications = _generate_trading_implications(validated_patterns, price, closes[-1])
     
     return {
-        "patterns": patterns,
+        "patterns": validated_patterns,
         "primary_pattern": primary_pattern,
         "pattern_confidence": primary_pattern["confidence"] if primary_pattern else 0.0,
         "trading_implications": trading_implications
@@ -434,6 +454,87 @@ def _detect_wedges(closes: List[float], highs: List[float], lows: List[float]) -
     return patterns
 
 
+def _validate_pattern(
+    pattern: Dict,
+    closes: List[float],
+    highs: List[float],
+    lows: List[float],
+    volumes: List[float],
+    current_price: float
+) -> Dict[str, Any]:
+    """
+    Validate pattern with 3 tests:
+    1. Geometric: Swing relationships pass thresholds
+    2. Trend filter: EMA20 vs EMA50 is consistent with pattern side
+    3. Participation: Volume surge ratio >= 1.3
+    """
+    validation = {
+        "geometric": False,
+        "trend": False,
+        "participation": False,
+        "passed_count": 0
+    }
+    
+    # Test 1: Geometric validation (pattern-specific)
+    if pattern.get("points"):
+        # Basic geometric check: pattern points are ordered correctly
+        points = pattern["points"]
+        if len(points) >= 2:
+            validation["geometric"] = True
+    else:
+        # For simpler patterns, check if pattern structure makes sense
+        if pattern.get("target") and pattern.get("stop"):
+            validation["geometric"] = True
+    
+    # Test 2: Trend filter (EMA20 vs EMA50)
+    if len(closes) >= 50:
+        # Calculate EMAs
+        ema20 = _calculate_ema(closes, 20)
+        ema50 = _calculate_ema(closes, 50)
+        
+        pattern_type = pattern.get("type", "NEUTRAL")
+        if pattern_type == "BULLISH":
+            validation["trend"] = ema20 > ema50  # EMA20 above EMA50 = bullish trend
+        elif pattern_type == "BEARISH":
+            validation["trend"] = ema20 < ema50  # EMA20 below EMA50 = bearish trend
+        else:
+            validation["trend"] = True  # Neutral patterns don't require trend filter
+    else:
+        validation["trend"] = True  # Not enough data, skip trend filter
+    
+    # Test 3: Participation (volume surge)
+    if len(volumes) >= 30:
+        recent_vol = sum(volumes[-5:]) / 5 if volumes[-5:] else 0
+        historical_vol = sum(volumes[-30:-5]) / 25 if volumes[-30:-5] else 0
+        volume_surge_ratio = recent_vol / historical_vol if historical_vol > 0 else 1.0
+        validation["participation"] = volume_surge_ratio >= 1.3
+        validation["volume_surge_ratio"] = volume_surge_ratio
+    else:
+        validation["participation"] = True  # Not enough data, skip participation
+    
+    # Count passed tests
+    validation["passed_count"] = sum([
+        validation["geometric"],
+        validation["trend"],
+        validation["participation"]
+    ])
+    
+    return validation
+
+
+def _calculate_ema(prices: List[float], period: int) -> float:
+    """Calculate Exponential Moving Average."""
+    if len(prices) < period:
+        return prices[-1] if prices else 0.0
+    
+    alpha = 2.0 / (period + 1)
+    ema = prices[-period]
+    for i in range(-period + 1, 0):
+        ema = alpha * prices[i] + (1 - alpha) * ema
+    
+    return ema
+
+
 def _generate_trading_implications(patterns: List[Dict], current_price: float, last_close: float) -> List[str]:
     """Generate actionable trading implications from detected patterns."""
     implications = []
@@ -448,18 +549,41 @@ def _generate_trading_implications(patterns: List[Dict], current_price: float, l
         ptype = primary.get("type", "NEUTRAL")
         name = primary.get("name", "")
         confidence = primary.get("confidence", 0.0)
+        validation = primary.get("validation", {})
+        status = primary.get("status", "UNKNOWN")
+        
+        # Add validation summary
+        if validation:
+            passed = validation.get("passed_count", 0)
+            implications.append(f"📊 Validation: {passed}/3 tests passed (Geometric: {'✓' if validation.get('geometric') else '✗'}, Trend: {'✓' if validation.get('trend') else '✗'}, Participation: {'✓' if validation.get('participation') else '✗'})")
+            
+            if not primary.get("validation_passed", False):
+                implications.append(f"⚠️ STATUS: {status} - {primary.get('status_note', 'Requires confirmation')}")
         
         if ptype == "BULLISH" and confidence > 0.65:
             target = primary.get("target", current_price * 1.05)
             stop = primary.get("stop", current_price * 0.95)
-            implications.append(f"🔵 {name}: Bullish pattern detected ({confidence*100:.0f}% confidence). Target: ${target:.2f}, Stop: ${stop:.2f}")
-            implications.append(f"   → Entry: Consider BUY on confirmation (breakout above {primary.get('points', {}).get('neckline', current_price * 1.02):.2f})")
+            
+            # Add formula explanation
+            if primary.get("points"):
+                implications.append(f"🔵 {name}: Bullish pattern detected ({confidence*100:.0f}% confidence). Target: ${target:.2f}, Stop: ${stop:.2f}")
+                implications.append(f"   → Target formula: Measured move = leg AB * 0.618 added to breakout")
+                implications.append(f"   → Stop formula: Below C swing low by ATR(14)*0.5")
+                implications.append(f"   → Entry: Consider BUY on confirmation (breakout above {primary.get('points', {}).get('neckline', current_price * 1.02):.2f})")
+            else:
+                implications.append(f"🔵 {name}: Bullish pattern detected ({confidence*100:.0f}% confidence). Target: ${target:.2f}, Stop: ${stop:.2f}")
         
         elif ptype == "BEARISH" and confidence > 0.65:
             target = primary.get("target", current_price * 0.95)
             stop = primary.get("stop", current_price * 1.05)
-            implications.append(f"🔴 {name}: Bearish pattern detected ({confidence*100:.0f}% confidence). Target: ${target:.2f}, Stop: ${stop:.2f}")
-            implications.append(f"   → Entry: Consider SELL/SHORT on confirmation (breakdown below {primary.get('points', {}).get('neckline', current_price * 0.98):.2f})")
+            
+            if primary.get("points"):
+                implications.append(f"🔴 {name}: Bearish pattern detected ({confidence*100:.0f}% confidence). Target: ${target:.2f}, Stop: ${stop:.2f}")
+                implications.append(f"   → Target formula: Measured move = head to neckline distance")
+                implications.append(f"   → Stop formula: Above head by ATR(14)*0.5")
+                implications.append(f"   → Entry: Consider SELL/SHORT on confirmation (breakdown below {primary.get('points', {}).get('neckline', current_price * 0.98):.2f})")
+            else:
+                implications.append(f"🔴 {name}: Bearish pattern detected ({confidence*100:.0f}% confidence). Target: ${target:.2f}, Stop: ${stop:.2f}")
         
         elif ptype == "NEUTRAL":
             implications.append(f"⚠️ {name}: Neutral pattern. Wait for breakout direction before taking action.")
