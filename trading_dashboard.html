@@ -148,10 +148,84 @@
             border-radius: 8px;
             margin-bottom: 32px;
             display: grid;
-            grid-template-columns: auto 1fr auto auto;
+            grid-template-columns: auto 1fr auto auto auto;
             gap: 32px;
             align-items: center;
             box-shadow: var(--shadow-lg);
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .action-btn {
+            padding: 10px 16px;
+            background: rgba(255,255,255,0.1);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .action-btn:hover {
+            background: rgba(255,255,255,0.2);
+            border-color: rgba(255,255,255,0.4);
+        }
+
+        .action-btn.primary {
+            background: var(--ft-green);
+            border-color: var(--ft-green);
+        }
+
+        .action-btn.primary:hover {
+            background: #00c463;
+        }
+
+        .triggered-conditions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .trigger-badge {
+            padding: 6px 12px;
+            background: rgba(255,215,0,0.15);
+            border: 1px solid #FFD700;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #FFD700;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .trigger-badge.high {
+            background: rgba(220,20,60,0.15);
+            border-color: var(--ft-red);
+            color: var(--ft-red);
+        }
+
+        .trigger-badge.medium {
+            background: rgba(255,165,0,0.15);
+            border-color: #FFA500;
+            color: #FFA500;
+        }
+
+        .trigger-badge.low {
+            background: rgba(0,166,81,0.15);
+            border-color: var(--ft-green);
+            color: var(--ft-green);
         }
 
         .verdict-badge {
@@ -991,9 +1065,9 @@
     </div>
 
     <div class="container">
-        <!-- DEBUG PANEL (Remove after fixing) -->
-        <div id="debug-panel" style="background: #1a1a1a; color: #00ff00; padding: 20px; border-radius: 8px; margin-bottom: 20px; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto;">
-            <div style="color: #ffff00; font-weight: bold; margin-bottom: 10px;">🔍 DIAGNOSTIC PANEL (Live Debug Info)</div>
+        <!-- DEBUG PANEL (Only shown with ?debug=1) -->
+        <div id="debug-panel" style="display: none; background: #1a1a1a; color: #00ff00; padding: 20px; border-radius: 8px; margin-bottom: 20px; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto;">
+            <div style="color: #ffff00; font-weight: bold; margin-bottom: 10px;">🔍 DIAGNOSTIC PANEL (Live Debug Info) - Add ?debug=1 to URL to enable</div>
             <div id="debug-output">Waiting for activity...</div>
         </div>
         
@@ -1017,14 +1091,28 @@
     </div>
 
     <script>
-        const API_BASE = 'http://127.0.0.1:8000';
+        // API Configuration - Environment-driven with fallback
+        const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+            ? 'http://127.0.0.1:8000'
+            : (window.API_BASE_URL || 'http://127.0.0.1:8000');
+        
+        // Debug mode - only show panel if ?debug=1 in URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const DEBUG_MODE = urlParams.get('debug') === '1';
+        
         let currentAnalysis = null;
         let priceChart = null;
         let rsiChart = null;
         
-        // DEBUG LOGGER - Shows messages on page
+        // DEBUG LOGGER - Only logs if debug panel exists
         function debugLog(message, type = 'info') {
             const output = document.getElementById('debug-output');
+            if (!output) {
+                // Always log to console, but only show on page if debug panel exists
+                console.log(`[${new Date().toLocaleTimeString()}] ${message}`);
+                return;
+            }
+            
             const timestamp = new Date().toLocaleTimeString();
             const icon = type === 'error' ? '❌' : type === 'success' ? '✅' : type === 'warn' ? '⚠️' : 'ℹ️';
             const color = type === 'error' ? '#ff4444' : type === 'success' ? '#00ff00' : type === 'warn' ? '#ffaa00' : '#00ffff';
@@ -1041,24 +1129,31 @@
             console.log(`[${timestamp}] ${message}`);
         }
         
-        // Test on load
+        // Test on load - only if debug mode
         window.addEventListener('DOMContentLoaded', () => {
-            debugLog('Page loaded successfully', 'success');
-            debugLog(`Plotly library: ${typeof Plotly !== 'undefined' ? 'LOADED ✓' : 'NOT LOADED ✗'}`, typeof Plotly !== 'undefined' ? 'success' : 'error');
-            debugLog(`API endpoint: ${API_BASE}`, 'info');
-            
-            // Test API connection
-            fetch(`${API_BASE}/`)
-                .then(r => {
-                    if (r.ok) {
-                        debugLog('✓ Backend server is RUNNING', 'success');
-                    } else {
-                        debugLog('✗ Backend returned error: ' + r.status, 'error');
-                    }
-                })
-                .catch(e => {
-                    debugLog('✗ BACKEND NOT RUNNING! Start with: uvicorn apps.api.main:app --reload', 'error');
-                });
+            // Show debug panel if debug mode enabled
+            const debugPanel = document.getElementById('debug-panel');
+            if (DEBUG_MODE && debugPanel) {
+                debugPanel.style.display = 'block';
+                debugLog('Page loaded successfully', 'success');
+                debugLog(`Plotly library: ${typeof Plotly !== 'undefined' ? 'LOADED ✓' : 'NOT LOADED ✗'}`, typeof Plotly !== 'undefined' ? 'success' : 'error');
+                debugLog(`API endpoint: ${API_BASE}`, 'info');
+                
+                // Test API connection
+                fetch(`${API_BASE}/`)
+                    .then(r => {
+                        if (r.ok) {
+                            debugLog('✓ Backend server is RUNNING', 'success');
+                        } else {
+                            debugLog('✗ Backend returned error: ' + r.status, 'error');
+                        }
+                    })
+                    .catch(e => {
+                        debugLog('✗ BACKEND NOT RUNNING! Start with: uvicorn apps.api.main:app --reload', 'error');
+                    });
+            } else {
+                console.log(`[${new Date().toLocaleTimeString()}] Dashboard loaded (debug mode: off)`);
+            }
         });
 
         function updateTime() {
@@ -1484,6 +1579,31 @@
                                        catalyst.days_to_event < 30 ? 'Moderate Impact' : 'Low Near-term Impact';
             const alignment = (patternExpectation.includes('Breakout') && catalyst.days_to_event < 7) ? 'ALIGNED' :
                              (patternExpectation.includes('Bounce') && catalyst.days_to_event < 30) ? 'ALIGNED' : 'MISALIGNED';
+            
+            // Evaluate triggered conditions
+            const triggers = evaluateTriggeredConditions({
+                rsi: market.rsi14 || 50,
+                volumeSurge: volumeSurge,
+                daysToEvent: catalyst.days_to_event || 999,
+                expectedMove: expectedMove,
+                pricePosition: pricePosition,
+                socialMentions: social.mention_count_total || 0,
+                confidence: plan.confidence || 0.5
+            });
+            
+            // Safe Risk/Reward calculation
+            const riskRewardRatio = safeRiskRewardRatio(
+                plan.target_price,
+                market.price || plan.entry_price,
+                plan.stop_price
+            );
+            const riskRewardDisplay = riskRewardRatio ? riskRewardRatio.toFixed(1) + ':1' : 'N/A';
+            
+            // Safe percentage calculations
+            const upsidePct = plan.target_price && market.price ? 
+                ((plan.target_price - market.price) / market.price * 100).toFixed(1) : 'N/A';
+            const downsidePct = plan.stop_price && market.price ? 
+                ((plan.stop_price - market.price) / market.price * 100).toFixed(1) : 'N/A';
 
                 content.innerHTML = `
                     <!-- Decision Bar -->
@@ -1492,6 +1612,15 @@
                         <div>
                             <div class="ticker-display">${ticker}</div>
                             <div style="font-size: 14px; opacity: 0.8; margin-top: 4px;">${strategy.reason || 'No strategy rationale available'}</div>
+                            ${triggers.length > 0 ? `
+                            <div class="triggered-conditions">
+                                ${triggers.slice(0, 3).map(t => `
+                                    <div class="trigger-badge ${t.severity}" title="${t.description}">
+                                        ${t.severity === 'high' ? '🔴' : t.severity === 'medium' ? '🟡' : '🟢'} ${t.name}
+                                    </div>
+                                `).join('')}
+                            </div>
+                            ` : ''}
                         </div>
                         <div class="confidence-meter">
                             <div class="confidence-value">${Math.round((plan.confidence || analysis.llm_confidence || 0.5) * 100)}%</div>
@@ -1504,12 +1633,48 @@
                             <div style="font-size: 32px; font-weight: 700; font-family: 'Playfair Display', serif;">$${market.price?.toFixed(2) || plan.entry_price?.toFixed(2) || 'N/A'}</div>
                             <div style="font-size: 12px; opacity: 0.8; margin-top: 4px;">Current Price</div>
                         </div>
+                        <div class="action-buttons">
+                            <button class="action-btn primary" onclick="createAlert('${ticker}', '${plan.action}')" title="Create price/condition alert">
+                                🔔 Alert
+                            </button>
+                            <button class="action-btn" onclick="logToCRM('${ticker}', '${plan.action}', ${plan.confidence || 0.5}, '${(plan.reason || '').substring(0, 50)}...')" title="Log decision to CRM">
+                                📝 Log
+                            </button>
+                            <button class="action-btn" onclick="exportDecisionMemo('${ticker}', currentAnalysis)" title="Export decision memo">
+                                📤 Export
+                            </button>
+                        </div>
                     </div>
+                    
+                    ${triggers.length > 0 ? `
+                    <!-- Triggered Conditions Card -->
+                    <div class="card" style="border-left: 4px solid ${triggers[0].severity === 'high' ? 'var(--ft-red)' : triggers[0].severity === 'medium' ? '#FFA500' : 'var(--ft-green)'}; margin-bottom: 24px;">
+                        <div class="card-header">
+                            <div>
+                                <div class="card-title">Triggered Conditions</div>
+                                <div class="card-subtitle">Rule-Based Signals & Alerts</div>
+                            </div>
+                        </div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+                            ${triggers.map(t => `
+                                <div class="trigger-badge ${t.severity}" style="padding: 12px 16px; cursor: pointer;" 
+                                     onclick="createAlert('${ticker}', '${t.name}')" 
+                                     title="Click to create alert for: ${t.description}">
+                                    <div style="font-size: 20px;">${t.severity === 'high' ? '🔴' : t.severity === 'medium' ? '🟡' : '🟢'}</div>
+                                    <div>
+                                        <div style="font-weight: 700; margin-bottom: 4px;">${t.name}</div>
+                                        <div style="font-size: 11px; opacity: 0.8;">${t.description}</div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                    ` : ''}
 
                     <!-- Key Metrics Bar - Investor Grade -->
                     <div class="key-metrics-bar">
                         <div class="metric-item">
-                            <div class="metric-label">Market Cap</div>
+                            <div class="metric-label">Market Cap (Est)</div>
                             <div class="metric-value">$${(market.dollar_adv / 0.02).toFixed(1)}B</div>
                         </div>
                         <div class="metric-item">
@@ -1546,17 +1711,17 @@
                     <div class="risk-reward-panel">
                         <div class="upside-box">
                             <div class="risk-label">Upside Target</div>
-                            <div class="risk-value">+${((plan.target_price - market.price) / market.price * 100).toFixed(1)}%</div>
-                            <div style="font-size: 14px; color: var(--ft-text-light); margin-top: 4px;">$${plan.target_price?.toFixed(2)}</div>
+                            <div class="risk-value">${upsidePct !== 'N/A' ? '+' + upsidePct + '%' : 'N/A'}</div>
+                            <div style="font-size: 14px; color: var(--ft-text-light); margin-top: 4px;">$${plan.target_price?.toFixed(2) || 'N/A'}</div>
                         </div>
                         <div class="risk-ratio">
-                            <div class="risk-ratio-value">${(Math.abs((plan.target_price - market.price) / (market.price - plan.stop_price))).toFixed(1)}:1</div>
+                            <div class="risk-ratio-value">${riskRewardDisplay}</div>
                             <div class="risk-ratio-label">Risk/Reward</div>
                         </div>
                         <div class="downside-box">
                             <div class="risk-label">Downside Risk</div>
-                            <div class="risk-value">${((plan.stop_price - market.price) / market.price * 100).toFixed(1)}%</div>
-                            <div style="font-size: 14px; color: var(--ft-text-light); margin-top: 4px;">$${plan.stop_price?.toFixed(2)}</div>
+                            <div class="risk-value">${downsidePct !== 'N/A' ? downsidePct + '%' : 'N/A'}</div>
+                            <div style="font-size: 14px; color: var(--ft-text-light); margin-top: 4px;">$${plan.stop_price?.toFixed(2) || 'N/A'}</div>
                         </div>
                     </div>
 
@@ -1968,6 +2133,131 @@
             if (pValue < 0.01 && Math.abs(effectSize) > 0.3) return 'A';
             if (pValue < 0.05 && Math.abs(effectSize) > 0.1) return 'B';
             return 'C';
+        }
+
+        // Rule Engine: Evaluate triggered conditions
+        function evaluateTriggeredConditions(metrics) {
+            const triggers = [];
+            
+            // Rule 1: Opportunistic Entry (RSI<30 AND VolSurge≥1.8x AND Event<7d)
+            if (metrics.rsi < 30 && metrics.volumeSurge >= 1.8 && metrics.daysToEvent < 7) {
+                triggers.push({
+                    name: 'Opportunistic Entry',
+                    severity: 'high',
+                    description: 'RSI<30 + Volume Surge 1.8x+ + Event <7 days'
+                });
+            }
+            
+            // Rule 2: Overbought Warning (RSI>70 AND Price Position>80%)
+            if (metrics.rsi > 70 && metrics.pricePosition > 80) {
+                triggers.push({
+                    name: 'Overbought Warning',
+                    severity: 'high',
+                    description: 'RSI>70 + Price near resistance'
+                });
+            }
+            
+            // Rule 3: Catalyst Approaching (Event<3 days AND Expected Move>5%)
+            if (metrics.daysToEvent < 3 && metrics.expectedMove > 5) {
+                triggers.push({
+                    name: 'Catalyst Approaching',
+                    severity: 'high',
+                    description: 'High-impact event <3 days'
+                });
+            }
+            
+            // Rule 4: Volume Surge Signal (Vol Surge>2x AND Social Mentions>50)
+            if (metrics.volumeSurge > 2.0 && metrics.socialMentions > 50) {
+                triggers.push({
+                    name: 'Momentum Surge',
+                    severity: 'medium',
+                    description: 'Volume surge + Social momentum'
+                });
+            }
+            
+            // Rule 5: Support Bounce Setup (Price Position<30% AND RSI<40)
+            if (metrics.pricePosition < 30 && metrics.rsi < 40) {
+                triggers.push({
+                    name: 'Support Bounce Setup',
+                    severity: 'medium',
+                    description: 'Near support + Oversold'
+                });
+            }
+            
+            // Rule 6: Low Confidence Alert (Confidence<50%)
+            if (metrics.confidence < 0.5) {
+                triggers.push({
+                    name: 'Low Confidence',
+                    severity: 'low',
+                    description: 'AI confidence below 50%'
+                });
+            }
+            
+            return triggers;
+        }
+
+        // Safe Risk/Reward calculation with guardrails
+        function safeRiskRewardRatio(targetPrice, currentPrice, stopPrice) {
+            if (!targetPrice || !currentPrice || !stopPrice) return null;
+            if (targetPrice <= currentPrice || stopPrice >= currentPrice) return null;
+            const upside = targetPrice - currentPrice;
+            const downside = currentPrice - stopPrice;
+            if (downside <= 0) return null;
+            return Math.abs(upside / downside);
+        }
+
+        // Action Handlers
+        async function createAlert(ticker, condition) {
+            try {
+                const response = await fetch(`${API_BASE}/alerts`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ticker, condition, timestamp: new Date().toISOString() })
+                });
+                if (response.ok) {
+                    alert(`✅ Alert created for ${ticker}: ${condition}`);
+                } else {
+                    alert(`⚠️ Alert creation failed (stub endpoint)`);
+                }
+            } catch (e) {
+                alert(`⚠️ Alert creation failed: ${e.message}`);
+            }
+        }
+
+        async function logToCRM(ticker, verdict, confidence, rationale) {
+            try {
+                const response = await fetch(`${API_BASE}/crm/log`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ticker, verdict, confidence, rationale, timestamp: new Date().toISOString() })
+                });
+                if (response.ok) {
+                    alert(`✅ Decision logged to CRM for ${ticker}`);
+                } else {
+                    alert(`⚠️ CRM logging failed (stub endpoint)`);
+                }
+            } catch (e) {
+                alert(`⚠️ CRM logging failed: ${e.message}`);
+            }
+        }
+
+        function exportDecisionMemo(ticker, analysis) {
+            const memo = {
+                ticker,
+                timestamp: new Date().toISOString(),
+                verdict: analysis.plan?.action,
+                confidence: analysis.plan?.confidence,
+                rationale: analysis.plan?.reason,
+                evidence: analysis.evidence,
+                plan: analysis.plan
+            };
+            const blob = new Blob([JSON.stringify(memo, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `decision_memo_${ticker}_${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
         }
 
         async function analyzeStock(ticker) {
