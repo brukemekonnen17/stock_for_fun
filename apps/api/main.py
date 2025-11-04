@@ -57,6 +57,10 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Catalyst Scanner API", version="0.2.0")
 
+# Include calibration router
+from apps.api.calibration_endpoints import router as calibration_router
+app.include_router(calibration_router)
+
 # CORS
 app.add_middleware(
     CORSMiddleware,
@@ -360,6 +364,228 @@ use /analyze/{ticker}
             "analysis": f"❌ Could not fetch data for {ticker}: {str(e)}"
         }
 
+@app.get("/history/{ticker}")
+def get_price_history(ticker: str, days: int = 30):
+    """
+    Get historical price data for time series visualization.
+    Returns OHLC data with technical indicators.
+    """
+    ticker = ticker.upper().strip()
+    try:
+        hist = market_data.daily_ohlc(ticker, lookback=days)
+        if not hist:
+            return {"error": f"No historical data for {ticker}"}
+        
+        closes = [h["close"] for h in hist]
+        highs = [h["high"] for h in hist]
+        lows = [h["low"] for h in hist]
+        volumes = [h["volume"] for h in hist]
+        dates = [h["date"] for h in hist]
+        
+        # Calculate technical indicators
+        # Simple Moving Averages
+        sma_20 = []
+        sma_50 = []
+        for i in range(len(closes)):
+            if i >= 19:
+                sma_20.append(sum(closes[i-19:i+1]) / 20)
+            else:
+                sma_20.append(None)
+            if i >= 49:
+                sma_50.append(sum(closes[i-49:i+1]) / 50)
+            else:
+                sma_50.append(None)
+        
+        # RSI calculation
+        rsi_values = []
+        for i in range(len(closes)):
+            if i < 14:
+                rsi_values.append(None)
+            else:
+                gains = [max(0, closes[j] - closes[j-1]) for j in range(i-13, i+1)]
+                losses = [max(0, closes[j-1] - closes[j]) for j in range(i-13, i+1)]
+                avg_gain = sum(gains) / 14
+                avg_loss = sum(losses) / 14
+                if avg_loss == 0:
+                    rsi = 100
+                else:
+                    rs = avg_gain / avg_loss
+                    rsi = 100 - (100 / (1 + rs))
+                rsi_values.append(rsi)
+        
+        # ATR calculation
+        atr_values = []
+        for i in range(len(hist)):
+            if i == 0:
+                atr_values.append(None)
+            else:
+                tr = max(highs[i] - lows[i], abs(highs[i] - closes[i-1]), abs(lows[i] - closes[i-1]))
+                if i < 14:
+                    atr_values.append(None)
+                else:
+                    recent_trs = []
+                    for j in range(max(0, i-14), i+1):
+                        if j > 0:
+                            tr = max(highs[j] - lows[j], abs(highs[j] - closes[j-1]), abs(lows[j] - closes[j-1]))
+                            recent_trs.append(tr)
+                    atr_values.append(sum(recent_trs) / len(recent_trs))
+        
+        # Support/Resistance levels
+        recent_high = max(highs[-10:])
+        recent_low = min(lows[-10:])
+        
+        # Ensure dates are strings (not date objects) for Plotly
+        date_strings = []
+        for date_val in dates:
+            if isinstance(date_val, str):
+                date_strings.append(date_val)
+            else:
+                # Convert date object to string
+                from datetime import date
+                if isinstance(date_val, date):
+                    date_strings.append(date_val.isoformat())
+                else:
+                    date_strings.append(str(date_val))
+        
+        return {
+            "ticker": ticker,
+            "data": [
+                {
+                    "date": date_strings[i],
+                    "open": float(hist[i]["open"]),
+                    "high": float(highs[i]),
+                    "low": float(lows[i]),
+                    "close": float(closes[i]),
+                    "volume": int(volumes[i]),
+                    "sma_20": float(sma_20[i]) if sma_20[i] is not None else None,
+                    "sma_50": float(sma_50[i]) if sma_50[i] is not None else None,
+                    "rsi": float(rsi_values[i]) if rsi_values[i] is not None else None,
+                    "atr": float(atr_values[i]) if atr_values[i] is not None else None,
+                }
+                for i in range(len(hist))
+            ],
+            "indicators": {
+                "current_rsi": float(rsi_values[-1]) if rsi_values[-1] else None,
+                "current_atr": float(atr_values[-1]) if atr_values[-1] else None,
+                "support": float(recent_low),
+                "resistance": float(recent_high),
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error fetching history for {ticker}: {e}", exc_info=True)
+        return {"error": str(e)}
+
+@app.get("/surge/{ticker}")
+def analyze_surge_potential(ticker: str):
+    """
+    Analyze if a stock has room for price increase or intraday play potential.
+    Returns surge analysis with room-to-run metrics.
+    """
+    ticker = ticker.upper().strip()
+    logger.info(f"Analyzing surge potential for {ticker}")
+    
+    try:
+        quote = market_data.last_quote(ticker)
+        price = quote["price"]
+        hist = market_data.daily_ohlc(ticker, lookback=30)
+        
+        if not hist:
+            return {"error": f"No data available for {ticker}"}
+        
+        closes = [h["close"] for h in hist]
+        highs = [h["high"] for h in hist]
+        lows = [h["low"] for h in hist]
+        volumes = [h["volume"] for h in hist]
+        
+        # Calculate key metrics
+        recent_high = max(highs[-10:])
+        recent_low = min(lows[-10:])
+        price_position = (price - recent_low) / (recent_high - recent_low) if (recent_high - recent_low) > 0 else 0.5
+        
+        # Volume surge
+        avg_vol_5d = sum(volumes[-5:]) / 5
+        avg_vol_30d = sum(volumes[-30:]) / 30
+        volume_surge = avg_vol_5d / avg_vol_30d if avg_vol_30d > 0 else 1.0
+        
+        # Calculate volatility
+        returns = [(closes[i] - closes[i-1]) / closes[i-1] for i in range(1, len(closes))]
+        volatility = np.std(returns) * np.sqrt(252) if returns else 0.03  # Annualized
+        
+        # Calculate upside potential
+        resistance_distance = (recent_high - price) / price if recent_high > price else 0
+        support_distance = (price - recent_low) / price if price > recent_low else 0
+        
+        # Intraday range potential (based on ATR)
+        atr_sum = 0
+        for i in range(1, min(15, len(hist))):
+            tr = max(highs[i] - lows[i], abs(highs[i] - closes[i-1]), abs(lows[i] - closes[i-1]))
+            atr_sum += tr
+        avg_atr = atr_sum / min(14, len(hist) - 1) if len(hist) > 1 else price * 0.02
+        intraday_potential = (avg_atr / price) * 100
+        
+        # Surge score (0-100)
+        surge_score = 0
+        if volume_surge > 2.0:
+            surge_score += 30
+        elif volume_surge > 1.5:
+            surge_score += 20
+        
+        if price_position < 0.3:  # Near support
+            surge_score += 30
+        elif price_position > 0.7:  # Near resistance
+            surge_score += 10
+        
+        if resistance_distance > 0.05:  # 5%+ room to resistance
+            surge_score += 20
+        
+        if intraday_potential > 3:  # High intraday volatility
+            surge_score += 20
+        
+        # Get social sentiment
+        from services.social.sentiment_scanner import get_real_time_sentiment
+        try:
+            social = get_real_time_sentiment(ticker)
+            if social.get('mention_count_total', 0) > 50 and social.get('sentiment_score', 0) > 0.5:
+                surge_score += 20  # Meme/social momentum
+                meme_signal = True
+            else:
+                meme_signal = False
+        except:
+            social = {}
+            meme_signal = False
+        
+        return {
+            "ticker": ticker,
+            "current_price": price,
+            "surge_score": min(100, surge_score),
+            "room_to_run": {
+                "upside_to_resistance": resistance_distance * 100,
+                "downside_to_support": support_distance * 100,
+                "intraday_potential_pct": intraday_potential,
+                "price_position": price_position * 100,
+            },
+            "momentum": {
+                "volume_surge": volume_surge,
+                "volatility_annualized": volatility * 100,
+                "atr_dollars": avg_atr,
+            },
+            "levels": {
+                "support": recent_low,
+                "resistance": recent_high,
+                "recent_high": recent_high,
+                "recent_low": recent_low,
+            },
+            "social": {
+                "mention_count": social.get('mention_count_total', 0),
+                "sentiment_score": social.get('sentiment_score', 0),
+                "meme_signal": meme_signal,
+            },
+            "recommendation": "HIGH_POTENTIAL" if surge_score >= 70 else "MODERATE" if surge_score >= 50 else "LOW_POTENTIAL",
+        }
+    except Exception as e:
+        logger.error(f"Error analyzing surge for {ticker}: {e}", exc_info=True)
+        return {"error": str(e)}
+
 @app.get("/analyze/{ticker}")
 async def analyze_stock(ticker: str):
     ticker = ticker.upper().strip()
@@ -579,6 +805,58 @@ async def decision_propose(body: ProposePayload) -> ProposeResponse:
     
     llm_out = await propose_trade(llm_payload)
     
+    # Get raw confidence from LLM
+    raw_confidence = float(llm_out.get("confidence", 0.5))
+    
+    # Apply calibration if available
+    from services.analysis.calibration import get_calibration_service
+    calibration_service = get_calibration_service()
+    
+    # Record prediction for calibration tracking
+    calibration_service.record_prediction(
+        decision_id=body.decision_id,
+        ticker=body.ticker,
+        predicted_confidence=raw_confidence,
+        arm_name=selected_arm
+    )
+    
+    # Get calibrated confidence
+    calibrated_confidence = calibration_service.calibrate_confidence(raw_confidence)
+    
+    # Update LLM output with calibrated confidence
+    llm_out["confidence"] = calibrated_confidence
+    llm_out["raw_confidence"] = raw_confidence  # Keep original for reference
+    
+    # Compute evidence-first statistical analysis
+    from apps.api.evidence_analysis import compute_evidence_analysis, compute_technical_indicators
+    evidence = {}
+    try:
+        hist = market_data.daily_ohlc(body.ticker, lookback=30)
+        if hist:
+            evidence = compute_evidence_analysis(
+                ticker=body.ticker,
+                hist=hist,
+                price=body.price,
+                volume_surge_ratio=body.volume_surge_ratio,
+                event_type=cat.event_type,
+                days_to_event=cat.days_to_event,
+                backtest_data=perf.model_dump() if hasattr(perf, 'model_dump') else {}
+            )
+    except Exception as e:
+        logger.warning(f"[{body.decision_id}] Evidence analysis failed: {e}")
+    
+    # Get calibration metrics
+    cal_metrics = calibration_service.compute_metrics()
+    if "calibration" not in evidence:
+        evidence["calibration"] = {}
+    evidence["calibration"].update({
+        "ece": cal_metrics["ece"],
+        "brier": cal_metrics["brier"],
+        "n_samples": cal_metrics["n_samples"],
+        "raw_confidence": raw_confidence,
+        "calibrated_confidence": calibrated_confidence
+    })
+    
     why = WhySelected(
         ticker=body.ticker,
         catalyst=cat,
@@ -586,14 +864,18 @@ async def decision_propose(body: ProposePayload) -> ProposeResponse:
         news=news_items,
         history=perf,
         market=mkt,
-        llm_confidence=float(llm_out.get("confidence", 0.0))
+        llm_confidence=calibrated_confidence  # Use calibrated confidence
     )
+    
+    analysis_dict = why.model_dump()
+    if evidence:
+        analysis_dict["evidence"] = evidence
     
     return ProposeResponse(
         selected_arm=selected_arm,
         plan=llm_out,
         decision_id=body.decision_id,
-        analysis=why.model_dump(),
+        analysis=analysis_dict,
         schema_version="ProposeResponseV1"
     )
 
@@ -640,7 +922,21 @@ def bandit_reward(body: RewardPayload, db: Session = Depends(get_db)):
     db.add(bandit_log)
     db.commit()
     
-    logger.info(f"[{decision_id}] Bandit updated")
+    # Update calibration service with outcome
+    from services.analysis.calibration import get_calibration_service
+    calibration_service = get_calibration_service()
+    # Determine outcome: 1 if reward > 0, 0 otherwise (or use threshold)
+    outcome = 1 if body.reward > 0 else 0
+    calibration_service.record_outcome(
+        decision_id=decision_id,
+        actual_outcome=outcome,
+        reward=body.reward
+    )
+    
+    # Auto-recalibrate if enough new data
+    calibration_service.auto_recalibrate(min_samples=20)
+    
+    logger.info(f"[{decision_id}] Bandit updated, calibration recorded")
     return {"status": "ok", "decision_id": decision_id}
 
 class OAuthReqBody(StrictModel):
