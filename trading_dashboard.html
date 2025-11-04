@@ -2224,6 +2224,33 @@
                                 `;
                             }).join('') : '<div style="padding: 20px; text-align: center; color: var(--ft-text-light);">No statistical tests available</div>'}
                             
+                            ${analysis.evidence && analysis.evidence.multiple_testing && analysis.evidence.multiple_testing.q_values && analysis.evidence.multiple_testing.q_values.length > 0 ? `
+                                <div style="margin-top: 16px; padding: 12px; background: rgba(0,0,0,0.03); border-radius: 4px;">
+                                    <div style="font-size: 12px; font-weight: 600; margin-bottom: 8px; text-transform: uppercase; color: var(--ft-text-light);">
+                                        FDR Correction (Multiple Testing)
+                                    </div>
+                                    ${analysis.evidence.multiple_testing.q_values.map(qv => `
+                                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                                            <span style="font-size: 11px;">${qv.test}:</span>
+                                            <span class="fdr-badge fdr-badge-${qv.badge_color || 'red'}" style="
+                                                padding: 2px 8px;
+                                                border-radius: 3px;
+                                                font-size: 10px;
+                                                font-weight: 600;
+                                                background: ${qv.badge_color === 'green' ? 'rgba(0,166,81,0.15)' : 
+                                                            qv.badge_color === 'yellow' ? 'rgba(255,193,7,0.15)' : 
+                                                            'rgba(220,20,60,0.15)'};
+                                                color: ${qv.badge_color === 'green' ? 'var(--ft-green)' : 
+                                                        qv.badge_color === 'yellow' ? '#FFC107' : 
+                                                        'var(--ft-red)'};
+                                            ">
+                                                ${qv.badge || `q=${qv.q.toFixed(3)}`}
+                                            </span>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            ` : ''}
+                            
                             ${analysis.evidence && analysis.evidence.calibration ? `
                                 <div class="calibration-metrics">
                                     <div class="calibration-item">
