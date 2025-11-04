@@ -26,7 +26,16 @@
       "timestamp": "2025-11-04T21:26:59.856386",
       "arm_name": "NEWS_SPIKE",
       "reward": null
+    },
+    {
+      "decision_id": "analyze-PCSA-1762309998",
+      "ticker": "PCSA",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-04T21:33:44.975402",
+      "arm_name": "NEWS_SPIKE",
+      "reward": null
     }
   ],
-  "last_updated": "2025-11-04T21:26:59.856436"
+  "last_updated": "2025-11-04T21:33:44.975436"
 }

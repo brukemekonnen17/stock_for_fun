@@ -228,6 +228,143 @@
             color: var(--ft-green);
         }
 
+        /* Benchmarks & Deltas */
+        .delta-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin-left: 6px;
+        }
+
+        .delta-badge.positive {
+            background: rgba(0,166,81,0.1);
+            color: var(--ft-green);
+        }
+
+        .delta-badge.negative {
+            background: rgba(220,20,60,0.1);
+            color: var(--ft-red);
+        }
+
+        .delta-badge.neutral {
+            background: rgba(107,107,107,0.1);
+            color: var(--ft-text-light);
+        }
+
+        /* What-If Sliders */
+        .what-if-panel {
+            background: var(--ft-surface);
+            border: 1px solid var(--ft-border);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+
+        .slider-group {
+            margin-bottom: 16px;
+        }
+
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: var(--ft-text-light);
+        }
+
+        .slider-value {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--ft-primary);
+        }
+
+        .slider-input {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: var(--ft-border);
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        .slider-input::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--ft-accent);
+            cursor: pointer;
+        }
+
+        .slider-input::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--ft-accent);
+            cursor: pointer;
+            border: none;
+        }
+
+        /* Subscribe Toggles */
+        .subscribe-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: white;
+            border: 1px solid var(--ft-border);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .subscribe-toggle:hover {
+            border-color: var(--ft-accent);
+            background: var(--ft-surface);
+        }
+
+        .subscribe-toggle.active {
+            background: rgba(0,80,179,0.1);
+            border-color: var(--ft-accent);
+        }
+
+        .toggle-switch {
+            width: 40px;
+            height: 20px;
+            background: var(--ft-border);
+            border-radius: 10px;
+            position: relative;
+            transition: background 0.2s;
+        }
+
+        .toggle-switch.active {
+            background: var(--ft-green);
+        }
+
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            background: white;
+            border-radius: 50%;
+            top: 2px;
+            left: 2px;
+            transition: left 0.2s;
+        }
+
+        .toggle-switch.active::after {
+            left: 22px;
+        }
+
         .verdict-badge {
             font-family: 'Playfair Display', serif;
             font-size: 48px;
@@ -1604,6 +1741,29 @@
                 ((plan.target_price - market.price) / market.price * 100).toFixed(1) : 'N/A';
             const downsidePct = plan.stop_price && market.price ? 
                 ((plan.stop_price - market.price) / market.price * 100).toFixed(1) : 'N/A';
+            
+            // Calculate benchmark deltas (90-day medians - simulated for now)
+            // In production, fetch from /benchmarks/{ticker} endpoint
+            const rsi90dMedian = 50; // Typical RSI median
+            const volSurge90dMedian = 1.2; // Typical volume surge
+            const rsiDelta = market.rsi14 ? market.rsi14 - rsi90dMedian : 0;
+            const volSurgeDelta = volumeSurge - volSurge90dMedian;
+            
+            const formatDelta = (delta, unit = '') => {
+                if (delta === 0) return { text: '±0', class: 'neutral' };
+                const sign = delta > 0 ? '+' : '';
+                const absDelta = Math.abs(delta);
+                return {
+                    text: `${sign}${absDelta.toFixed(1)}${unit}`,
+                    class: delta > 0 ? 'positive' : 'negative'
+                };
+            };
+            
+            const rsiDeltaFormatted = formatDelta(rsiDelta);
+            const volSurgeDeltaFormatted = formatDelta(volSurgeDelta, 'x');
+            
+            // Store current market price for what-if calculations
+            const currentMarketPrice = market.price || plan.entry_price;
 
                 content.innerHTML = `
                     <!-- Decision Bar -->
@@ -1683,7 +1843,10 @@
                         </div>
                         <div class="metric-item">
                             <div class="metric-label">Vol Surge</div>
-                            <div class="metric-value ${volumeSurge > 1.5 ? 'positive' : 'neutral'}">${volumeSurge.toFixed(2)}x</div>
+                            <div class="metric-value ${volumeSurge > 1.5 ? 'positive' : 'neutral'}">
+                                ${volumeSurge.toFixed(2)}x
+                                ${volumeSurge ? `<span class="delta-badge ${volSurgeDeltaFormatted.class}" title="vs 90-day median (${volSurge90dMedian.toFixed(1)}x)">${volSurgeDeltaFormatted.text}</span>` : ''}
+                            </div>
                         </div>
                         <div class="metric-item">
                             <div class="metric-label">Intraday Range</div>
@@ -1695,7 +1858,10 @@
                         </div>
                         <div class="metric-item">
                             <div class="metric-label">RSI(14)</div>
-                            <div class="metric-value ${market.rsi14 > 70 ? 'negative' : market.rsi14 < 30 ? 'positive' : 'neutral'}">${market.rsi14?.toFixed(0) || 'N/A'}</div>
+                            <div class="metric-value ${market.rsi14 > 70 ? 'negative' : market.rsi14 < 30 ? 'positive' : 'neutral'}">
+                                ${market.rsi14?.toFixed(0) || 'N/A'}
+                                ${market.rsi14 ? `<span class="delta-badge ${rsiDeltaFormatted.class}" title="vs 90-day median (${rsi90dMedian})">${rsiDeltaFormatted.text}</span>` : ''}
+                            </div>
                         </div>
                         <div class="metric-item">
                             <div class="metric-label">Event in</div>
@@ -1711,17 +1877,118 @@
                     <div class="risk-reward-panel">
                         <div class="upside-box">
                             <div class="risk-label">Upside Target</div>
-                            <div class="risk-value">${upsidePct !== 'N/A' ? '+' + upsidePct + '%' : 'N/A'}</div>
+                            <div class="risk-value" id="whatif-upside">${upsidePct !== 'N/A' ? '+' + upsidePct + '%' : 'N/A'}</div>
                             <div style="font-size: 14px; color: var(--ft-text-light); margin-top: 4px;">$${plan.target_price?.toFixed(2) || 'N/A'}</div>
                         </div>
                         <div class="risk-ratio">
-                            <div class="risk-ratio-value">${riskRewardDisplay}</div>
+                            <div class="risk-ratio-value" id="whatif-rr">${riskRewardDisplay}</div>
                             <div class="risk-ratio-label">Risk/Reward</div>
                         </div>
                         <div class="downside-box">
                             <div class="risk-label">Downside Risk</div>
-                            <div class="risk-value">${downsidePct !== 'N/A' ? downsidePct + '%' : 'N/A'}</div>
+                            <div class="risk-value" id="whatif-downside">${downsidePct !== 'N/A' ? downsidePct + '%' : 'N/A'}</div>
                             <div style="font-size: 14px; color: var(--ft-text-light); margin-top: 4px;">$${plan.stop_price?.toFixed(2) || 'N/A'}</div>
+                        </div>
+                    </div>
+
+                    <!-- What-If Sensitivity Analysis -->
+                    <div class="what-if-panel">
+                        <div class="card-header" style="margin-bottom: 20px;">
+                            <div>
+                                <div class="card-title">What-If Analysis</div>
+                                <div class="card-subtitle">Stress Test Decision Parameters</div>
+                            </div>
+                        </div>
+                        <div class="slider-group">
+                            <div class="slider-label">
+                                <span>Stop Loss</span>
+                                <span class="slider-value" id="whatif-stop-value">$${plan.stop_price?.toFixed(2) || 'N/A'}</span>
+                            </div>
+                            <input type="range" class="slider-input" id="whatif-stop" 
+                                   min="${market.price ? (market.price * 0.85).toFixed(2) : plan.stop_price * 0.9}" 
+                                   max="${market.price ? (market.price * 0.98).toFixed(2) : plan.stop_price * 1.1}" 
+                                   step="0.01" 
+                                   value="${plan.stop_price || market.price * 0.95}"
+                                   oninput="document.getElementById('whatif-stop-value').textContent = '\\$' + parseFloat(this.value).toFixed(2); updateWhatIf();">
+                        </div>
+                        <div class="slider-group">
+                            <div class="slider-label">
+                                <span>Target Price</span>
+                                <span class="slider-value" id="whatif-target-value">$${plan.target_price?.toFixed(2) || 'N/A'}</span>
+                            </div>
+                            <input type="range" class="slider-input" id="whatif-target" 
+                                   min="${market.price ? (market.price * 1.02).toFixed(2) : plan.target_price * 0.9}" 
+                                   max="${market.price ? (market.price * 1.20).toFixed(2) : plan.target_price * 1.2}" 
+                                   step="0.01" 
+                                   value="${plan.target_price || market.price * 1.10}"
+                                   oninput="document.getElementById('whatif-target-value').textContent = '\\$' + parseFloat(this.value).toFixed(2); updateWhatIf();">
+                        </div>
+                        <div class="slider-group">
+                            <div class="slider-label">
+                                <span>Expected Move (%)</span>
+                                <span class="slider-value" id="whatif-move-value">${expectedMove.toFixed(1)}%</span>
+                            </div>
+                            <input type="range" class="slider-input" id="whatif-move" 
+                                   min="0" max="15" step="0.1" 
+                                   value="${expectedMove}"
+                                   oninput="document.getElementById('whatif-move-value').textContent = parseFloat(this.value).toFixed(1) + '%'; updateWhatIf();">
+                        </div>
+                        <div class="slider-group">
+                            <div class="slider-label">
+                                <span>Days to Event</span>
+                                <span class="slider-value" id="whatif-days-value">${Math.round(catalyst.days_to_event || 0)}</span>
+                            </div>
+                            <input type="range" class="slider-input" id="whatif-days" 
+                                   min="0" max="30" step="1" 
+                                   value="${Math.round(catalyst.days_to_event || 0)}"
+                                   oninput="document.getElementById('whatif-days-value').textContent = parseInt(this.value); updateWhatIf();">
+                        </div>
+                    </div>
+
+                    <!-- Subscribe to Alerts -->
+                    <div class="card" style="margin-bottom: 24px;">
+                        <div class="card-header">
+                            <div>
+                                <div class="card-title">Alert Subscriptions</div>
+                                <div class="card-subtitle">Real-time Notifications for Key Signals</div>
+                            </div>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 12px;">
+                            <div class="subscribe-toggle" id="subscribe-rsi" onclick="toggleSubscribe('rsi', '${ticker}')">
+                                <div class="toggle-switch ${subscribeState.rsi ? 'active' : ''}"></div>
+                                <div style="flex: 1;">
+                                    <div style="font-weight: 600; font-size: 13px;">RSI Threshold</div>
+                                    <div style="font-size: 11px; color: var(--ft-text-light);">Notify when RSI < 30 or > 70</div>
+                                </div>
+                            </div>
+                            <div class="subscribe-toggle" id="subscribe-pricePosition" onclick="toggleSubscribe('pricePosition', '${ticker}')">
+                                <div class="toggle-switch ${subscribeState.pricePosition ? 'active' : ''}"></div>
+                                <div style="flex: 1;">
+                                    <div style="font-weight: 600; font-size: 13px;">Price Position</div>
+                                    <div style="font-size: 11px; color: var(--ft-text-light);">Notify when price crosses support/resistance</div>
+                                </div>
+                            </div>
+                            <div class="subscribe-toggle" id="subscribe-socialMentions" onclick="toggleSubscribe('socialMentions', '${ticker}')">
+                                <div class="toggle-switch ${subscribeState.socialMentions ? 'active' : ''}"></div>
+                                <div style="flex: 1;">
+                                    <div style="font-weight: 600; font-size: 13px;">Social Momentum</div>
+                                    <div style="font-size: 11px; color: var(--ft-text-light);">Notify when mentions > 50 or sentiment flips</div>
+                                </div>
+                            </div>
+                            <div class="subscribe-toggle" id="subscribe-volumeSurge" onclick="toggleSubscribe('volumeSurge', '${ticker}')">
+                                <div class="toggle-switch ${subscribeState.volumeSurge ? 'active' : ''}"></div>
+                                <div style="flex: 1;">
+                                    <div style="font-weight: 600; font-size: 13px;">Volume Surge</div>
+                                    <div style="font-size: 11px; color: var(--ft-text-light);">Notify when volume > 2x average</div>
+                                </div>
+                            </div>
+                            <div class="subscribe-toggle" id="subscribe-eventApproach" onclick="toggleSubscribe('eventApproach', '${ticker}')">
+                                <div class="toggle-switch ${subscribeState.eventApproach ? 'active' : ''}"></div>
+                                <div style="flex: 1;">
+                                    <div style="font-weight: 600; font-size: 13px;">Event Approach</div>
+                                    <div style="font-size: 11px; color: var(--ft-text-light);">Notify when event < 3 days away</div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -2259,6 +2526,56 @@
             a.click();
             URL.revokeObjectURL(url);
         }
+
+        // Global what-if update function
+        window.updateWhatIf = function() {
+            const stopInput = document.getElementById('whatif-stop');
+            const targetInput = document.getElementById('whatif-target');
+            const moveInput = document.getElementById('whatif-move');
+            const daysInput = document.getElementById('whatif-days');
+            
+            if (!stopInput || !targetInput || !currentAnalysis) return;
+            
+            const marketPrice = currentAnalysis.analysis?.market?.price || currentAnalysis.plan?.entry_price;
+            if (!marketPrice) return;
+            
+            const stopPrice = parseFloat(stopInput.value);
+            const targetPrice = parseFloat(targetInput.value);
+            
+            // Recalculate risk/reward
+            const newRR = safeRiskRewardRatio(targetPrice, marketPrice, stopPrice);
+            const newUpside = ((targetPrice - marketPrice) / marketPrice * 100).toFixed(1);
+            const newDownside = ((stopPrice - marketPrice) / marketPrice * 100).toFixed(1);
+            
+            // Update display
+            const rrDisplay = document.getElementById('whatif-rr');
+            const upsideDisplay = document.getElementById('whatif-upside');
+            const downsideDisplay = document.getElementById('whatif-downside');
+            
+            if (rrDisplay) rrDisplay.textContent = newRR ? newRR.toFixed(1) + ':1' : 'N/A';
+            if (upsideDisplay) upsideDisplay.textContent = '+' + newUpside + '%';
+            if (downsideDisplay) downsideDisplay.textContent = newDownside + '%';
+        };
+
+        // Global subscribe toggle handler
+        window.toggleSubscribe = function(signal, ticker) {
+            const toggle = document.getElementById(`subscribe-${signal}`);
+            if (!toggle) return;
+            
+            const switchEl = toggle.querySelector('.toggle-switch');
+            if (!switchEl) return;
+            
+            const isActive = switchEl.classList.contains('active');
+            
+            // Toggle state
+            switchEl.classList.toggle('active', !isActive);
+            toggle.classList.toggle('active', !isActive);
+            
+            // Create/remove subscription
+            if (!isActive) {
+                createAlert(ticker, signal);
+            }
+        };
 
         async function analyzeStock(ticker) {
             if (!ticker) {
