@@ -1678,6 +1678,25 @@
 
             const ticker = analysis.ticker || plan.ticker;
             
+            // Extract confidence from multiple possible locations with debugging - MUST BE BEFORE ANY USE
+            const rawConfidence = plan.confidence !== undefined && plan.confidence !== null ? plan.confidence :
+                                 analysis.llm_confidence !== undefined && analysis.llm_confidence !== null ? analysis.llm_confidence :
+                                 data.plan?.confidence !== undefined && data.plan?.confidence !== null ? data.plan.confidence :
+                                 data.analysis?.llm_confidence !== undefined && data.analysis?.llm_confidence !== null ? data.analysis.llm_confidence :
+                                 0.5;
+            
+            const finalConfidence = Math.max(0.0, Math.min(1.0, rawConfidence));
+            
+            // Debug confidence extraction
+            console.log('Confidence extraction:', {
+                'plan.confidence': plan.confidence,
+                'analysis.llm_confidence': analysis.llm_confidence,
+                'data.plan?.confidence': data.plan?.confidence,
+                'data.analysis?.llm_confidence': data.analysis?.llm_confidence,
+                'rawConfidence': rawConfidence,
+                'finalConfidence': finalConfidence
+            });
+            
             // Fetch surge analysis and history data
             let surgeData = null;
             let historyData = null;
@@ -1781,24 +1800,6 @@
                 volumeSurge: false,
                 eventApproach: false
             };
-            
-            // Extract confidence from multiple possible locations with debugging
-            const rawConfidence = plan.confidence !== undefined && plan.confidence !== null ? plan.confidence :
-                                 analysis.llm_confidence !== undefined && analysis.llm_confidence !== null ? analysis.llm_confidence :
-                                 data.plan?.confidence !== undefined && data.plan?.confidence !== null ? data.plan.confidence :
-                                 data.analysis?.llm_confidence !== undefined && data.analysis?.llm_confidence !== null ? data.analysis.llm_confidence :
-                                 0.5;
-            
-            const finalConfidence = Math.max(0.0, Math.min(1.0, rawConfidence));
-            
-            // Debug confidence extraction
-            console.log('Confidence extraction:', {
-                'plan.confidence': plan.confidence,
-                'analysis.llm_confidence': analysis.llm_confidence,
-                'data.plan?.confidence': data.plan?.confidence,
-                'data.analysis?.llm_confidence': data.analysis?.llm_confidence,
-                'finalConfidence': finalConfidence
-            });
 
                 content.innerHTML = `
                     <!-- Decision Bar -->
