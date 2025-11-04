@@ -668,9 +668,6 @@ async def analyze_stock(ticker: str):
                 else:
                     expected_move_heuristic = 0.03
                     realized_volatility = 0.20
-            else:
-                expected_move_heuristic = 0.03
-                realized_volatility = 0.20
             
             # Try to get IV-based expected move
             from services.marketdata.options_iv_adapter import get_options_iv_adapter
