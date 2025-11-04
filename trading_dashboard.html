@@ -529,6 +529,14 @@
             margin-bottom: 24px;
         }
 
+        .risk-reward-panel-compact {
+            background: white;
+            border: 1px solid var(--ft-border);
+            border-radius: 8px;
+            padding: 16px;
+            box-shadow: var(--shadow-sm);
+        }
+
         .upside-box {
             text-align: right;
             padding-right: 20px;
@@ -1725,7 +1733,7 @@
                 expectedMove: expectedMove,
                 pricePosition: pricePosition,
                 socialMentions: social.mention_count_total || 0,
-                confidence: plan.confidence || 0.5
+                                confidence: finalConfidence
             });
             
             // Safe Risk/Reward calculation
@@ -1773,6 +1781,24 @@
                 volumeSurge: false,
                 eventApproach: false
             };
+            
+            // Extract confidence from multiple possible locations with debugging
+            const rawConfidence = plan.confidence !== undefined && plan.confidence !== null ? plan.confidence :
+                                 analysis.llm_confidence !== undefined && analysis.llm_confidence !== null ? analysis.llm_confidence :
+                                 data.plan?.confidence !== undefined && data.plan?.confidence !== null ? data.plan.confidence :
+                                 data.analysis?.llm_confidence !== undefined && data.analysis?.llm_confidence !== null ? data.analysis.llm_confidence :
+                                 0.5;
+            
+            const finalConfidence = Math.max(0.0, Math.min(1.0, rawConfidence));
+            
+            // Debug confidence extraction
+            console.log('Confidence extraction:', {
+                'plan.confidence': plan.confidence,
+                'analysis.llm_confidence': analysis.llm_confidence,
+                'data.plan?.confidence': data.plan?.confidence,
+                'data.analysis?.llm_confidence': data.analysis?.llm_confidence,
+                'finalConfidence': finalConfidence
+            });
 
                 content.innerHTML = `
                     <!-- Decision Bar -->
@@ -1780,7 +1806,7 @@
                         <div class="verdict-badge ${plan.action}">${plan.action}</div>
                         <div>
                             <div class="ticker-display">${ticker}</div>
-                            <div style="font-size: 14px; opacity: 0.8; margin-top: 4px;">${strategy.reason || 'No strategy rationale available'}</div>
+                            <div style="font-size: 14px; opacity: 0.8; margin-top: 4px;">${strategy.reason || `No strategy rationale available for ${ticker}`}</div>
                             ${triggers.length > 0 ? `
                             <div class="triggered-conditions">
                                 ${triggers.slice(0, 3).map(t => `
@@ -1792,10 +1818,10 @@
                             ` : ''}
                         </div>
                         <div class="confidence-meter">
-                            <div class="confidence-value">${Math.round((plan.confidence || analysis.llm_confidence || 0.5) * 100)}%</div>
+                            <div class="confidence-value">${Math.round(finalConfidence * 100)}%</div>
                             <div class="confidence-label">Confidence</div>
                             <div class="confidence-bar">
-                                <div class="confidence-fill" style="width: ${(plan.confidence || analysis.llm_confidence || 0.5) * 100}%"></div>
+                                <div class="confidence-fill" style="width: ${finalConfidence * 100}%"></div>
                             </div>
                         </div>
                         <div style="text-align: right;">
@@ -1806,7 +1832,7 @@
                             <button class="action-btn primary" onclick="createAlert('${ticker}', '${plan.action}')" title="Create price/condition alert">
                                 🔔 Alert
                             </button>
-                            <button class="action-btn" onclick="logToCRM('${ticker}', '${plan.action}', ${plan.confidence || 0.5}, '${(plan.reason || '').substring(0, 50)}...')" title="Log decision to CRM">
+                            <button class="action-btn" onclick="logToCRM('${ticker}', '${plan.action}', ${finalConfidence}, '${(plan.reason || '').substring(0, 50)}...')" title="Log decision to CRM">
                                 📝 Log
                             </button>
                             <button class="action-btn" onclick="exportDecisionMemo('${ticker}', currentAnalysis)" title="Export decision memo">
@@ -1882,22 +1908,63 @@
                         </div>
                     </div>
 
-                    <!-- Compact Risk/Reward Panel -->
-                    <div class="risk-reward-panel">
-                        <div class="upside-box">
-                            <div class="risk-label">Upside Target</div>
-                            <div class="risk-value" id="whatif-upside">${upsidePct !== 'N/A' ? '+' + upsidePct + '%' : 'N/A'}</div>
-                            <div style="font-size: 14px; color: var(--ft-text-light); margin-top: 4px;">$${plan.target_price?.toFixed(2) || 'N/A'}</div>
+                    <!-- Two-Column Layout: Risk/Reward + Quick Insights -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px;">
+                        <!-- Compact Risk/Reward Panel -->
+                        <div class="risk-reward-panel-compact">
+                            <div style="font-size: 11px; text-transform: uppercase; color: var(--ft-text-light); margin-bottom: 12px; font-weight: 600;">Risk/Reward</div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                <div style="text-align: center;">
+                                    <div style="font-size: 10px; color: var(--ft-green); margin-bottom: 4px; font-weight: 600;">Upside</div>
+                                    <div style="font-size: 24px; font-weight: 700; color: var(--ft-green); font-family: 'Playfair Display', serif;" id="whatif-upside">${upsidePct !== 'N/A' ? '+' + upsidePct + '%' : 'N/A'}</div>
+                                    <div style="font-size: 11px; color: var(--ft-text-light); margin-top: 2px;">$${plan.target_price?.toFixed(2) || 'N/A'}</div>
+                                </div>
+                                <div style="text-align: center;">
+                                    <div style="font-size: 28px; font-weight: 700; color: var(--ft-accent); font-family: 'Playfair Display', serif;" id="whatif-rr">${riskRewardDisplay}</div>
+                                    <div style="font-size: 9px; color: var(--ft-text-light); margin-top: 2px;">R/R</div>
+                                </div>
+                                <div style="text-align: center;">
+                                    <div style="font-size: 10px; color: var(--ft-red); margin-bottom: 4px; font-weight: 600;">Downside</div>
+                                    <div style="font-size: 24px; font-weight: 700; color: var(--ft-red); font-family: 'Playfair Display', serif;" id="whatif-downside">${downsidePct !== 'N/A' ? downsidePct + '%' : 'N/A'}</div>
+                                    <div style="font-size: 11px; color: var(--ft-text-light); margin-top: 2px;">$${plan.stop_price?.toFixed(2) || 'N/A'}</div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="risk-ratio">
-                            <div class="risk-ratio-value" id="whatif-rr">${riskRewardDisplay}</div>
-                            <div class="risk-ratio-label">Risk/Reward</div>
+                        
+                        <!-- Quick Insight Cards (2 columns) -->
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                            <div class="card" style="padding: 16px;">
+                                <div style="font-size: 11px; text-transform: uppercase; color: var(--ft-text-light); margin-bottom: 8px; font-weight: 600;">
+                                    Pattern Signal
+                                </div>
+                                <div style="font-size: 20px; font-weight: 700; margin-bottom: 8px;">
+                                    ${plan.breakout_flag ? '📈 Breakout' : pricePosition > 0.7 ? '⚠️ Resistance' : pricePosition < 0.3 ? '✅ Support' : '➡️ Neutral'}
+                                </div>
+                                <div style="font-size: 12px; color: var(--ft-text-light);">${patternExpectation}</div>
+                            </div>
+                            <div class="card" style="padding: 16px;">
+                                <div style="font-size: 11px; text-transform: uppercase; color: var(--ft-text-light); margin-bottom: 8px; font-weight: 600;">
+                                    Catalyst Event
+                                </div>
+                                <div style="font-size: 20px; font-weight: 700; margin-bottom: 8px;">
+                                    ${catalyst.event_type || 'N/A'}
+                                </div>
+                                <div style="font-size: 12px; color: var(--ft-text-light);">
+                                    ${Math.round(catalyst.days_to_event || 0)} days • ${expectedMove.toFixed(1)}% expected move
+                                </div>
+                            </div>
                         </div>
-                        <div class="downside-box">
-                            <div class="risk-label">Downside Risk</div>
-                            <div class="risk-value" id="whatif-downside">${downsidePct !== 'N/A' ? downsidePct + '%' : 'N/A'}</div>
-                            <div style="font-size: 14px; color: var(--ft-text-light); margin-top: 4px;">$${plan.stop_price?.toFixed(2) || 'N/A'}</div>
+                    </div>
+                    
+                    <!-- Alignment Card (Full Width) -->
+                    <div class="card" style="padding: 16px; margin-bottom: 24px; border-left: 4px solid ${alignment === 'ALIGNED' ? 'var(--ft-green)' : 'var(--ft-orange)'};">
+                        <div style="font-size: 11px; text-transform: uppercase; color: var(--ft-text-light); margin-bottom: 8px; font-weight: 600;">
+                            Pattern vs Catalyst Alignment
                         </div>
+                        <div style="font-size: 24px; font-weight: 700; margin-bottom: 8px; color: ${alignment === 'ALIGNED' ? 'var(--ft-green)' : 'var(--ft-orange)'};">
+                            ${alignment === 'ALIGNED' ? '✓ Aligned' : '⚠️ Misaligned'}
+                        </div>
+                        <div style="font-size: 12px; color: var(--ft-text-light);">${alignment === 'ALIGNED' ? 'Technical pattern and catalyst event are aligned for ${ticker}' : 'Technical pattern and catalyst event show misalignment for ${ticker}'}</div>
                     </div>
 
                     <!-- What-If Sensitivity Analysis -->
@@ -2084,38 +2151,6 @@
                     </div>
                     ` : ''}
 
-                    <!-- Quick Insight Cards Grid -->
-                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 24px;">
-                        <div class="card" style="padding: 16px;">
-                            <div style="font-size: 11px; text-transform: uppercase; color: var(--ft-text-light); margin-bottom: 8px; font-weight: 600;">
-                                Pattern Signal
-                            </div>
-                            <div style="font-size: 20px; font-weight: 700; margin-bottom: 8px;">
-                                ${plan.breakout_flag ? '📈 Breakout' : pricePosition > 0.7 ? '⚠️ Resistance' : pricePosition < 0.3 ? '✅ Support' : '➡️ Neutral'}
-                            </div>
-                            <div style="font-size: 12px; color: var(--ft-text-light);">${patternExpectation}</div>
-                        </div>
-                        <div class="card" style="padding: 16px;">
-                            <div style="font-size: 11px; text-transform: uppercase; color: var(--ft-text-light); margin-bottom: 8px; font-weight: 600;">
-                                Catalyst Event
-                            </div>
-                            <div style="font-size: 20px; font-weight: 700; margin-bottom: 8px;">
-                                ${catalyst.event_type || 'N/A'}
-                            </div>
-                            <div style="font-size: 12px; color: var(--ft-text-light);">
-                                ${Math.round(catalyst.days_to_event || 0)} days • ${expectedMove.toFixed(1)}% expected move
-                            </div>
-                        </div>
-                        <div class="card" style="padding: 16px;">
-                            <div style="font-size: 11px; text-transform: uppercase; color: var(--ft-text-light); margin-bottom: 8px; font-weight: 600;">
-                                Alignment
-                            </div>
-                            <div style="font-size: 20px; font-weight: 700; margin-bottom: 8px; color: ${alignment === 'ALIGNED' ? 'var(--ft-green)' : 'var(--ft-orange)'};">
-                                ${alignment === 'ALIGNED' ? '✓ Aligned' : '⚠️ Misaligned'}
-                            </div>
-                            <div style="font-size: 12px; color: var(--ft-text-light);">Pattern vs Catalyst</div>
-                        </div>
-                    </div>
 
                 <!-- Main Analytics Grid -->
                 <div class="analytics-grid">
@@ -2187,13 +2222,13 @@
                         <!-- AI Reasoning -->
                         <div class="reasoning-section">
                             <div class="card-title" style="margin-bottom: 16px;">AI Trader Analysis</div>
-                            <div class="reasoning-text">${plan.reason || 'No reasoning provided by the AI.'}</div>
+                            <div class="reasoning-text">${plan.reason || `No reasoning provided by the AI for ${ticker}.`}</div>
                         </div>
 
                         <!-- Strategy Rationale -->
                         <div class="strategy-card">
                             <div class="strategy-arm">${strategy.selected_arm || 'N/A'}</div>
-                            <div class="strategy-reason">${strategy.reason || 'No strategy rationale available.'}</div>
+                            <div class="strategy-reason">${strategy.reason || `No strategy rationale available for ${ticker}.`}</div>
                             <div class="gating-facts">
                                 ${(strategy.gating_facts || []).map(fact => `<div class="gating-fact">${fact}</div>`).join('')}
                             </div>
@@ -2331,7 +2366,7 @@
                                             </span>
                                         </div>
                                     </div>
-                                `).join('') : '<div style="text-align: center; padding: 20px; color: var(--ft-text-light);">No recent news available</div>'}
+                                `).join('') : `<div style="text-align: center; padding: 20px; color: var(--ft-text-light);">No recent news available for ${ticker}</div>`}
                             </div>
                         </div>
 

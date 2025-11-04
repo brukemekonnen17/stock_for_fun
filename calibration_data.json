@@ -80,7 +80,25 @@
       "timestamp": "2025-11-04T21:39:33.214835",
       "arm_name": "SKIP",
       "reward": null
+    },
+    {
+      "decision_id": "analyze-BYND-1762310445",
+      "ticker": "BYND",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-04T21:41:13.792931",
+      "arm_name": "REACTIVE",
+      "reward": null
+    },
+    {
+      "decision_id": "analyze-HTZ-1762310701",
+      "ticker": "HTZ",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-04T21:45:28.473828",
+      "arm_name": "NEWS_SPIKE",
+      "reward": null
     }
   ],
-  "last_updated": "2025-11-04T21:39:33.214991"
+  "last_updated": "2025-11-04T21:45:28.473942"
 }
