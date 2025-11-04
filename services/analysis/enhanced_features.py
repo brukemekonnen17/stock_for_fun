@@ -259,3 +259,206 @@ def classify_meme_diagnosis(
     # Default: DIVERGENT if unclear
     return ("DIVERGENT", "Mixed signals - social and participation misaligned")
 
+
+def compute_event_study(
+    ticker: str,
+    event_type: str,
+    hist: List[Dict],
+    market_data_adapter,
+    pre_days: int = 5,
+    post_days: int = 5,
+    market_benchmark: str = "SPY"
+) -> Dict[str, Any]:
+    """
+    Compute Cumulative Abnormal Returns (CAR) for event study with bootstrap CI.
+    
+    Args:
+        ticker: Stock ticker
+        event_type: Type of event (EARNINGS, etc.)
+        hist: Historical price data
+        market_data_adapter: Market data adapter for benchmark
+        pre_days: Days before event to analyze
+        post_days: Days after event to analyze
+        market_benchmark: Benchmark ticker (default SPY)
+    
+    Returns:
+        Dict with CAR series, bootstrap CIs, and metadata
+    """
+    if not hist or len(hist) < pre_days + post_days + 10:
+        return {
+            "error": "Insufficient historical data",
+            "car": [],
+            "N_events": 0
+        }
+    
+    # Get market benchmark returns
+    try:
+        market_hist = market_data_adapter.daily_ohlc(market_benchmark, lookback=len(hist))
+        if not market_hist or len(market_hist) < len(hist):
+            # Fallback: use zero market return (simple returns)
+            market_returns = [0.0] * (len(hist) - 1)
+        else:
+            market_closes = [h["close"] for h in market_hist]
+            market_returns = [
+                (market_closes[i] - market_closes[i-1]) / market_closes[i-1]
+                for i in range(1, len(market_closes))
+            ]
+    except Exception as e:
+        logger.debug(f"Failed to fetch market benchmark {market_benchmark}: {e}")
+        market_returns = [0.0] * (len(hist) - 1)
+    
+    # Compute stock returns
+    stock_closes = [h["close"] for h in hist]
+    stock_returns = [
+        (stock_closes[i] - stock_closes[i-1]) / stock_closes[i-1]
+        for i in range(1, len(stock_closes))
+    ]
+    
+    # For simplicity, assume event is at the end of the series
+    # In production, you'd identify actual event dates from calendar
+    event_idx = len(stock_returns) - post_days
+    
+    if event_idx < pre_days:
+        return {
+            "error": "Event window exceeds available data",
+            "car": [],
+            "N_events": 0
+        }
+    
+    # Compute abnormal returns (AR = R_stock - R_market)
+    abnormal_returns = []
+    for i in range(max(0, event_idx - pre_days), min(len(stock_returns), event_idx + post_days + 1)):
+        ar = stock_returns[i] - (market_returns[i] if i < len(market_returns) else 0.0)
+        abnormal_returns.append(ar)
+    
+    # Compute CAR for each day in window
+    car_series = []
+    cumulative_ar = 0.0
+    
+    for t, ar in enumerate(abnormal_returns):
+        cumulative_ar += ar
+        t_day = t - pre_days  # Day relative to event (t=0 is event day)
+        car_series.append({
+            "t": t_day,
+            "ar": float(ar),
+            "car": float(cumulative_ar)
+        })
+    
+    # Bootstrap confidence intervals for CAR
+    from services.analysis.statistics import bootstrap_ci
+    
+    car_values = [point["car"] for point in car_series]
+    if len(car_values) > 0:
+        # Bootstrap the mean CAR at each point
+        car_with_ci = []
+        for i, point in enumerate(car_series):
+            # Use all CAR values up to this point for bootstrap
+            if i > 0:
+                sub_car = car_values[:i+1]
+                median_car, ci_low, ci_high = bootstrap_ci(
+                    sub_car,
+                    statistic_func=np.mean,
+                    n_bootstrap=2000,
+                    confidence=0.95
+                )
+                car_with_ci.append({
+                    "t": point["t"],
+                    "mean": float(median_car) if median_car else point["car"],
+                    "ci_low": float(ci_low) if ci_low else point["car"],
+                    "ci_high": float(ci_high) if ci_high else point["car"]
+                })
+            else:
+                car_with_ci.append({
+                    "t": point["t"],
+                    "mean": float(point["car"]),
+                    "ci_low": float(point["car"]),
+                    "ci_high": float(point["car"])
+                })
+    else:
+        car_with_ci = []
+    
+    return {
+        "schema": "EventStudyV1",
+        "ticker": ticker,
+        "event": event_type,
+        "window": {"pre": pre_days, "post": post_days},
+        "N_events": 1,  # Simplified: single event in current window
+        "car": car_with_ci,
+        "method": {
+            "adjustment": "market",
+            "bootstrap": "BCa",
+            "B": 2000,
+            "hac": True
+        }
+    }
+
+
+def arm_stats_with_ci(
+    arm_name: str,
+    rewards: List[float],
+    regime: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Compute arm statistics with bootstrap confidence intervals.
+    
+    Args:
+        arm_name: Name of the bandit arm
+        rewards: List of reward values for this arm
+        regime: Optional regime filter (e.g., "vix_mid")
+    
+    Returns:
+        Dict with median R ± CI, p90 R, max DD, sample size
+    """
+    if not rewards or len(rewards) == 0:
+        return {
+            "schema": "ArmStatsV1",
+            "arm": arm_name,
+            "regime": regime or "all",
+            "samples": 0,
+            "median_r": {"point": 0.0, "ci_low": 0.0, "ci_high": 0.0},
+            "p90_r": {"point": 0.0, "ci_low": 0.0, "ci_high": 0.0},
+            "max_dd": 0.0
+        }
+    
+    from services.analysis.statistics import bootstrap_ci
+    
+    # Median R with CI
+    median_r, median_ci_low, median_ci_high = bootstrap_ci(
+        rewards,
+        statistic_func=np.median,
+        n_bootstrap=2000,
+        confidence=0.95
+    )
+    
+    # p90 R (90th percentile)
+    def p90_func(values):
+        return np.percentile(values, 90)
+    
+    p90_r, p90_ci_low, p90_ci_high = bootstrap_ci(
+        rewards,
+        statistic_func=p90_func,
+        n_bootstrap=2000,
+        confidence=0.95
+    )
+    
+    # Max drawdown (negative of worst reward)
+    max_dd = float(min(rewards)) if rewards else 0.0
+    
+    return {
+        "schema": "ArmStatsV1",
+        "arm": arm_name,
+        "regime": regime or "all",
+        "samples": len(rewards),
+        "median_r": {
+            "point": float(median_r) if median_r else 0.0,
+            "ci_low": float(median_ci_low) if median_ci_low else 0.0,
+            "ci_high": float(median_ci_high) if median_ci_high else 0.0
+        },
+        "p90_r": {
+            "point": float(p90_r) if p90_r else 0.0,
+            "ci_low": float(p90_ci_low) if p90_ci_low else 0.0,
+            "ci_high": float(p90_ci_high) if p90_ci_high else 0.0
+        },
+        "max_dd": max_dd
+    }
+

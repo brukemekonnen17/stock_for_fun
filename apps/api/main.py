@@ -918,6 +918,77 @@ async def decision_propose(body: ProposePayload) -> ProposeResponse:
     except Exception as e:
         logger.warning(f"[{body.decision_id}] Evidence analysis failed: {e}")
     
+    # Get event-study CAR
+    event_study_summary = {}
+    try:
+        from services.analysis.enhanced_features import compute_event_study
+        event_study = compute_event_study(
+            ticker=body.ticker,
+            event_type=cat.event_type,
+            hist=hist if hist else [],
+            market_data_adapter=market_data,
+            pre_days=5,
+            post_days=5
+        )
+        if "car" in event_study and len(event_study["car"]) > 0:
+            # Extract key CAR points
+            car_t1 = next((c for c in event_study["car"] if c["t"] == 1), None)
+            car_t3 = next((c for c in event_study["car"] if c["t"] == 3), None)
+            car_t5 = next((c for c in event_study["car"] if c["t"] == 5), None)
+            
+            event_study_summary = {
+                "car_t+1": {
+                    "mean": car_t1["mean"] if car_t1 else 0.0,
+                    "ci_low": car_t1["ci_low"] if car_t1 else 0.0,
+                    "ci_high": car_t1["ci_high"] if car_t1 else 0.0
+                } if car_t1 else None,
+                "car_t+3": {
+                    "mean": car_t3["mean"] if car_t3 else 0.0,
+                    "ci_low": car_t3["ci_low"] if car_t3 else 0.0,
+                    "ci_high": car_t3["ci_high"] if car_t3 else 0.0
+                } if car_t3 else None,
+                "car_t+5": {
+                    "mean": car_t5["mean"] if car_t5 else 0.0,
+                    "ci_low": car_t5["ci_low"] if car_t5 else 0.0,
+                    "ci_high": car_t5["ci_high"] if car_t5 else 0.0
+                } if car_t5 else None,
+                "supports": car_t1 and car_t1["mean"] > 0.005 if car_t1 else False  # CAR > 0.5% suggests positive
+            }
+    except Exception as e:
+        logger.debug(f"[{body.decision_id}] Event study computation failed: {e}")
+    
+    # Get arm statistics with CI
+    arm_stats_summary = {}
+    try:
+        from services.analysis.enhanced_features import arm_stats_with_ci
+        from db.models import BanditLog
+        from db.session import SessionLocal
+        
+        db_session = SessionLocal()
+        try:
+            arm_logs = db_session.query(BanditLog).filter(
+                BanditLog.arm_name == selected_arm
+            ).all()
+            
+            if arm_logs:
+                rewards = [log.reward for log in arm_logs]
+                arm_stats = arm_stats_with_ci(selected_arm, rewards)
+                arm_stats_summary = {
+                    "arm": arm_stats["arm"],
+                    "samples": arm_stats["samples"],
+                    "median_r_ci": [
+                        arm_stats["median_r"]["ci_low"],
+                        arm_stats["median_r"]["ci_high"]
+                    ],
+                    "median_r_point": arm_stats["median_r"]["point"],
+                    "p90_r": arm_stats["p90_r"]["point"],
+                    "max_dd": arm_stats["max_dd"]
+                }
+        finally:
+            db_session.close()
+    except Exception as e:
+        logger.debug(f"[{body.decision_id}] Arm stats computation failed: {e}")
+    
     # Get calibration metrics
     cal_metrics = calibration_service.compute_metrics()
     if "calibration" not in evidence:
@@ -929,6 +1000,12 @@ async def decision_propose(body: ProposePayload) -> ProposeResponse:
         "raw_confidence": raw_confidence,
         "calibrated_confidence": calibrated_confidence
     })
+    
+    # Add event study and arm stats to evidence
+    if event_study_summary:
+        evidence["event_study"] = event_study_summary
+    if arm_stats_summary:
+        evidence["arm_stats"] = arm_stats_summary
     
     why = WhySelected(
         ticker=body.ticker,
@@ -1126,6 +1203,144 @@ def get_bandit_stats(db: Session = Depends(get_db)):
     return {
         "total": total or 0,
         "arm_stats": arm_stats
+    }
+
+@app.get("/evidence/event-study")
+def get_event_study(
+    ticker: str,
+    event: str = "EARNINGS",
+    pre: int = 5,
+    post: int = 5,
+    benchmark: str = "SPY"
+):
+    """
+    Compute Cumulative Abnormal Returns (CAR) for event study with bootstrap CI.
+    
+    Args:
+        ticker: Stock ticker
+        event: Event type (EARNINGS, FDA_PDUFA, etc.)
+        pre: Days before event
+        post: Days after event
+        benchmark: Market benchmark (default SPY)
+    
+    Returns:
+        EventStudyV1 schema with CAR series and confidence intervals
+    """
+    ticker = ticker.upper().strip()
+    try:
+        hist = market_data.daily_ohlc(ticker, lookback=max(30, pre + post + 10))
+        if not hist:
+            raise HTTPException(status_code=404, detail=f"No historical data for {ticker}")
+        
+        from services.analysis.enhanced_features import compute_event_study
+        result = compute_event_study(
+            ticker=ticker,
+            event_type=event,
+            hist=hist,
+            market_data_adapter=market_data,
+            pre_days=pre,
+            post_days=post,
+            market_benchmark=benchmark
+        )
+        
+        if "error" in result:
+            raise HTTPException(status_code=400, detail=result["error"])
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error computing event study for {ticker}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to compute event study: {str(e)}")
+
+@app.get("/stats/arms/ci")
+def get_arm_stats_ci(
+    arm: Optional[str] = None,
+    regime: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Get arm performance statistics with bootstrap confidence intervals.
+    
+    Args:
+        arm: Arm name (optional, returns all arms if not specified)
+        regime: Regime filter (optional, e.g., "vix_mid")
+    
+    Returns:
+        ArmStatsV1 schema with median R ± CI, p90 R, max DD
+    """
+    try:
+        query = db.query(BanditLog)
+        
+        if arm:
+            query = query.filter(BanditLog.arm_name == arm)
+        
+        # Note: regime filtering would require storing regime in BanditLog
+        # For now, we use all data
+        logs = query.all()
+        
+        if not logs:
+            raise HTTPException(status_code=404, detail=f"No data found for arm={arm}")
+        
+        # Group by arm if arm not specified
+        if not arm:
+            arms = {}
+            for log in logs:
+                if log.arm_name not in arms:
+                    arms[log.arm_name] = []
+                arms[log.arm_name].append(log.reward)
+            
+            from services.analysis.enhanced_features import arm_stats_with_ci
+            results = []
+            for arm_name, rewards in arms.items():
+                stats = arm_stats_with_ci(arm_name, rewards, regime)
+                results.append(stats)
+            
+            return {
+                "schema": "ArmStatsV1",
+                "arms": results
+            }
+        else:
+            # Single arm
+            rewards = [log.reward for log in logs]
+            from services.analysis.enhanced_features import arm_stats_with_ci
+            return arm_stats_with_ci(arm, rewards, regime)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error computing arm stats: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to compute arm stats: {str(e)}")
+
+@app.get("/stats/calibration")
+def get_calibration_stats():
+    """
+    Get LLM confidence calibration metrics.
+    
+    Returns:
+        CalibrationV1 schema with ECE, Brier score, reliability plot data
+    """
+    from services.analysis.calibration import get_calibration_service
+    service = get_calibration_service()
+    
+    metrics = service.compute_metrics()
+    plot_data = service.get_reliability_plot_data(n_bins=10)
+    
+    return {
+        "schema": "CalibrationV1",
+        "ece": metrics["ece"],
+        "brier": metrics["brier"],
+        "n_samples": metrics["n_samples"],
+        "bins": [
+            {
+                "bin": plot_data["bin_centers"][i],
+                "pred": plot_data["bin_confidences"][i],
+                "real": plot_data["bin_accuracies"][i],
+                "count": plot_data["bin_counts"][i]
+            }
+            for i in range(len(plot_data["bin_centers"]))
+        ]
     }
 
 @app.post("/trade/execute")
