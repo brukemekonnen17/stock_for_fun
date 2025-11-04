@@ -1806,7 +1806,7 @@
                         <div class="verdict-badge ${plan.action}">${plan.action}</div>
                         <div>
                             <div class="ticker-display">${ticker}</div>
-                            <div style="font-size: 14px; opacity: 0.8; margin-top: 4px;">${strategy.reason || `No strategy rationale available for ${ticker}`}</div>
+                            <div style="font-size: 14px; opacity: 0.8; margin-top: 4px;">${strategy.reason || 'No strategy rationale available for ' + ticker}</div>
                             ${triggers.length > 0 ? `
                             <div class="triggered-conditions">
                                 ${triggers.slice(0, 3).map(t => `
@@ -2222,13 +2222,13 @@
                         <!-- AI Reasoning -->
                         <div class="reasoning-section">
                             <div class="card-title" style="margin-bottom: 16px;">AI Trader Analysis</div>
-                            <div class="reasoning-text">${plan.reason || `No reasoning provided by the AI for ${ticker}.`}</div>
+                            <div class="reasoning-text">${plan.reason || 'No reasoning provided by the AI for ' + ticker + '.'}</div>
                         </div>
 
                         <!-- Strategy Rationale -->
                         <div class="strategy-card">
                             <div class="strategy-arm">${strategy.selected_arm || 'N/A'}</div>
-                            <div class="strategy-reason">${strategy.reason || `No strategy rationale available for ${ticker}.`}</div>
+                            <div class="strategy-reason">${strategy.reason || 'No strategy rationale available for ' + ticker + '.'}</div>
                             <div class="gating-facts">
                                 ${(strategy.gating_facts || []).map(fact => `<div class="gating-fact">${fact}</div>`).join('')}
                             </div>
@@ -2366,7 +2366,7 @@
                                             </span>
                                         </div>
                                     </div>
-                                `).join('') : `<div style="text-align: center; padding: 20px; color: var(--ft-text-light);">No recent news available for ${ticker}</div>`}
+                                `).join('') : '<div style="text-align: center; padding: 20px; color: var(--ft-text-light);">No recent news available for ' + ticker + '</div>'}
                             </div>
                         </div>
 
