@@ -648,6 +648,7 @@ async def analyze_stock(ticker: str):
                     rolling_volatility_10d = 0.03
 
                 closes = [h["close"] for h in hist]
+                # Compute realized volatility for IV-RV gap and fallback
                 if len(closes) >= 20:
                     returns = [(closes[i] - closes[i-1]) / closes[i-1] for i in range(1, len(closes))]
                     if len(returns) >= 19:
@@ -655,24 +656,90 @@ async def analyze_stock(ticker: str):
                         mean_return = statistics.mean(returns[-20:])
                         variance = statistics.mean([(r - mean_return) ** 2 for r in returns[-20:]])
                         std_dev = variance ** 0.5
-                        expected_move = abs(2 * std_dev)
+                        realized_volatility = abs(std_dev) * np.sqrt(252)  # Annualized
+                        expected_move_heuristic = abs(2 * std_dev)
                     else:
-                        expected_move = 0.03
+                        realized_volatility = 0.20  # 20% default annualized
+                        expected_move_heuristic = 0.03
                 elif len(closes) >= 6:
                     rets = [abs((closes[i] - closes[i-1]) / closes[i-1]) for i in range(1, len(closes))]
-                    expected_move = sum(rets) / len(rets) if rets else 0.03
+                    expected_move_heuristic = sum(rets) / len(rets) if rets else 0.03
+                    realized_volatility = expected_move_heuristic * np.sqrt(252)  # Rough annualized
                 else:
-                    expected_move = 0.03
+                    expected_move_heuristic = 0.03
+                    realized_volatility = 0.20
+            else:
+                expected_move_heuristic = 0.03
+                realized_volatility = 0.20
+            
+            # Try to get IV-based expected move
+            from services.marketdata.options_iv_adapter import get_options_iv_adapter
+            iv_adapter = get_options_iv_adapter()
+            event_type, days_to_event = get_event_details(ticker, market_data, db=None)
+            iv_data = iv_adapter.get_expected_move_iv(
+                ticker=ticker,
+                days_to_event=days_to_event,
+                fallback_volatility=realized_volatility
+            )
+            
+            # Use IV-based if available and confident, otherwise fallback
+            if iv_data["confidence"] > 0.6:
+                expected_move = iv_data["expected_move_iv"]
+                iv = iv_data["iv"]
+                expected_move_source = iv_data["source"]
+            else:
+                expected_move = expected_move_heuristic
+                iv = realized_volatility
+                expected_move_source = "historical_volatility"
+            
+            # Compute IV-RV gap
+            from services.analysis.enhanced_features import compute_iv_rv_gap
+            iv_rv_gap, iv_regime = compute_iv_rv_gap(iv, realized_volatility)
         except ValueError as e:
             logger.warning(f"Historical data fetch failed for {ticker}: {e}")
             dollar_vol = price * 1_000_000
             expected_move = 0.03
+            expected_move_source = "default"
+            iv = 0.20
+            realized_volatility = 0.20
+            iv_rv_gap = 0.0
+            iv_regime = "UNKNOWN"
+            volume_surge_ratio, recent_high, recent_low = 1.0, price, price
+            price_position, rolling_volatility_10d = 0.5, 0.03
+            adv_change = 0.0
+            breakout_flag = False
+            hist = []
         
         liquidity_score = 1.0 if dollar_vol > 1_000_000_000 else (0.8 if dollar_vol > 100_000_000 else 0.5)
         spread_score = 1.0 - min(1.0, spread / (price * 0.01))
         volatility_score = min(1.0, expected_move / 0.10)
         rank = 50 + (liquidity_score * 20) + (spread_score * 15) + (volatility_score * 15)
         rank = max(0.0, min(100.0, rank))
+        
+        # Compute enhanced features
+        from services.analysis.enhanced_features import (
+            compute_sector_relative_strength,
+            compute_participation_quality,
+            compute_distance_to_levels,
+            classify_meme_diagnosis
+        )
+        
+        # Sector relative strength
+        sector_rel_strength = compute_sector_relative_strength(ticker, hist, market_data) if hist else 1.0
+        
+        # Participation quality
+        participation_quality, participation_score = compute_participation_quality(
+            volume_surge_ratio=volume_surge_ratio,
+            dollar_adv=dollar_vol,
+            spread=spread,
+            price=price
+        )
+        
+        # Distance to levels
+        distance_levels = compute_distance_to_levels(price, recent_high, recent_low)
+        
+        # IV-RV gap (already computed above)
+        iv_rv_gap_normalized = max(-1.0, min(1.0, iv_rv_gap / 0.20))  # Normalize to -1 to 1
         
         try:
             hist_recent = market_data.daily_ohlc(ticker, lookback=5)
@@ -699,14 +766,20 @@ async def analyze_stock(ticker: str):
         
         event_type, days_to_event = get_event_details(ticker, market_data, db=None)
         
+        # Enhanced context vector (removed duplicate expected_move, added richer features)
         context = [
-            immediacy,
-            0.6,
-            liquidity_score,
-            expected_move,
-            news_score,
-            expected_move,
-            days_to_event
+            immediacy,                      # 0: Recent volatility/immediacy
+            0.6,                           # 1: Materiality (static for now)
+            liquidity_score,               # 2: Liquidity score
+            expected_move,                  # 3: Expected move (IV-based if available)
+            news_score,                     # 4: News sentiment
+            days_to_event,                  # 5: Days to event
+            sector_rel_strength,            # 6: Sector relative strength (NEW)
+            price_position,                 # 7: Price position 10d (NEW)
+            volume_surge_ratio,             # 8: Volume surge ratio (NEW)
+            participation_score,           # 9: Participation quality score (NEW)
+            iv_rv_gap_normalized,           # 10: IV-RV gap normalized (NEW)
+            distance_levels["distance_to_resistance"],  # 11: Distance to resistance (NEW)
         ]
         
         payload = ProposePayload(
