@@ -107,7 +107,16 @@
       "timestamp": "2025-11-04T21:54:13.656587",
       "arm_name": "POST_EVENT_MOMO",
       "reward": null
+    },
+    {
+      "decision_id": "analyze-HTZ-1762311447",
+      "ticker": "HTZ",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-04T21:57:52.284276",
+      "arm_name": "EARNINGS_PRE",
+      "reward": null
     }
   ],
-  "last_updated": "2025-11-04T21:54:13.656687"
+  "last_updated": "2025-11-04T21:57:52.284357"
 }

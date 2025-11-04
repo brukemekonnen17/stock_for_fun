@@ -156,6 +156,10 @@ def compute_evidence_analysis(
         if recent_volumes and historical_volumes:
             vol_test = mann_whitney_test(recent_volumes, historical_volumes)
             vol_test.hypothesis = f"Recent 5d volume > historical 25d volume (surge={volume_surge_ratio:.2f}x)"
+            
+            # Generate actionable interpretation
+            vol_decision = _interpret_volume_test(vol_test, volume_surge_ratio)
+            
             evidence["tests"].append({
                 "name": vol_test.name,
                 "hypothesis": vol_test.hypothesis,
@@ -163,12 +167,16 @@ def compute_evidence_analysis(
                 "p_value": vol_test.p_value,
                 "ci_low": vol_test.ci_low,
                 "ci_high": vol_test.ci_high,
-                "notes": vol_test.notes
+                "notes": vol_test.notes,
+                "decision_implication": vol_decision  # NEW: Actionable interpretation
             })
     
     # Test 2: Bootstrap CI for median return
     if len(returns) >= 20:
         median_r, ci_low, ci_high = bootstrap_ci(returns, np.median, n_bootstrap=1000)
+        # Generate actionable interpretation
+        median_decision = _interpret_median_return(median_r, ci_low, ci_high)
+        
         evidence["tests"].append({
             "name": "bootstrap_median_r",
             "hypothesis": "Median return (95% CI)",
@@ -176,7 +184,8 @@ def compute_evidence_analysis(
             "p_value": None,
             "ci_low": ci_low,
             "ci_high": ci_high,
-            "notes": f"Median R: {median_r:.4f} [{ci_low:.4f}, {ci_high:.4f}]"
+            "notes": f"Median R: {median_r:.4f} [{ci_low:.4f}, {ci_high:.4f}]",
+            "decision_implication": median_decision  # NEW: Actionable interpretation
         })
     
     # Test 3: Hit rate test (if backtest data available)
@@ -186,6 +195,10 @@ def compute_evidence_analysis(
         if total > 0:
             hit_rate_test = wilson_binomial_test(wins, total, baseline=0.5)
             hit_rate_test.hypothesis = f"Hit rate > 50% (observed: {wins}/{total})"
+            
+            # Generate actionable interpretation
+            hit_rate_decision = _interpret_hit_rate_test(hit_rate_test, wins, total)
+            
             evidence["tests"].append({
                 "name": hit_rate_test.name,
                 "hypothesis": hit_rate_test.hypothesis,
@@ -193,7 +206,8 @@ def compute_evidence_analysis(
                 "p_value": hit_rate_test.p_value,
                 "ci_low": hit_rate_test.ci_low,
                 "ci_high": hit_rate_test.ci_high,
-                "notes": hit_rate_test.notes
+                "notes": hit_rate_test.notes,
+                "decision_implication": hit_rate_decision  # NEW: Actionable interpretation
             })
     
     # FDR correction for multiple tests
@@ -267,4 +281,84 @@ def compute_room_to_run(
         "swing_room_down_pct": float(swing_room_down * 100),
         "explain": explain
     }
+
+
+def _interpret_volume_test(test, volume_surge_ratio: float) -> str:
+    """Generate actionable interpretation for volume surge test."""
+    if test.p_value is None:
+        return "⚠️ Volume test incomplete. Cannot assess volume significance."
+    
+    if test.p_value < 0.05:
+        # Statistically significant
+        if volume_surge_ratio >= 2.0:
+            return "✅ STRONG SIGNAL: Volume surge is statistically significant (p<0.05). High volume confirms price move. Consider BUY if pattern supports."
+        elif volume_surge_ratio >= 1.5:
+            return "✅ MODERATE SIGNAL: Volume surge is significant. Moderate volume support. BUY if pattern aligns, otherwise SKIP."
+        else:
+            return "⚠️ WEAK SIGNAL: Volume surge is significant but magnitude is low (surge<1.5x). Require pattern confirmation before trading."
+    else:
+        # Not statistically significant
+        if volume_surge_ratio >= 2.0:
+            return "⚠️ DIVERGENT: High volume surge (2x+) but NOT statistically significant (p≥0.05). This suggests noise or one-off event. SKIP unless pattern strongly confirms."
+        elif volume_surge_ratio >= 1.5:
+            return "⚠️ WEAK EVIDENCE: Moderate volume surge but NOT significant. Statistical evidence is weak. Require strong pattern confirmation."
+        else:
+            return "❌ NO SIGNAL: Low volume surge and NOT statistically significant. No volume confirmation. SKIP this trade."
+    
+    # Check CI
+    if test.ci_low is not None and test.ci_high is not None:
+        if test.ci_low <= 0 <= test.ci_high:
+            return "⚠️ UNCERTAIN: Confidence interval includes zero. True effect could be negative. Require additional confirmation."
+    
+    return "⚠️ Volume test inconclusive. Use other signals."
+
+
+def _interpret_median_return(median_r: float, ci_low: float, ci_high: float) -> str:
+    """Generate actionable interpretation for median return."""
+    # Check if CI includes zero (uncertain)
+    if ci_low <= 0 <= ci_high:
+        return "⚠️ UNCERTAIN: Median return CI includes zero [-0.9%, +2.0%]. True median could be negative. Low confidence in positive returns."
+    
+    # Check if median is positive
+    if median_r > 0.01:  # > 1%
+        return f"✅ POSITIVE BIAS: Median return is {median_r*100:.2f}% with 95% CI [{ci_low*100:.2f}%, {ci_high*100:.2f}%]. Historical bias is positive. Supports BUY."
+    elif median_r > 0:
+        return f"⚠️ WEAK POSITIVE: Median return is small {median_r*100:.2f}% [{ci_low*100:.2f}%, {ci_high*100:.2f}%]. Marginal positive bias. Require pattern confirmation."
+    else:
+        return f"❌ NEGATIVE BIAS: Median return is {median_r*100:.2f}% [{ci_low*100:.2f}%, {ci_high*100:.2f}%]. Historical bias is negative. Consider SKIP or SELL."
+    
+    return "⚠️ Median return analysis inconclusive."
+
+
+def _interpret_hit_rate_test(test, wins: int, total: int) -> str:
+    """Generate actionable interpretation for hit rate test."""
+    hit_rate = wins / total if total > 0 else 0.0
+    
+    if test.p_value is None:
+        return "⚠️ Hit rate test incomplete."
+    
+    if total < 10:
+        return f"⚠️ INSUFFICIENT DATA: Only {total} samples. Need at least 10 trades for reliable hit rate. Cannot assess strategy performance."
+    
+    if hit_rate == 0:
+        return f"❌ CRITICAL: Hit rate is 0% ({wins}/{total}). Strategy has NEVER worked historically. SKIP this trade or drastically reduce position size."
+    
+    if test.p_value < 0.05:
+        # Statistically significant
+        if hit_rate >= 0.6:
+            return f"✅ STRONG: Hit rate {hit_rate*100:.0f}% ({wins}/{total}) is significantly >50% (p<0.05). Strategy has proven success. Supports BUY."
+        elif hit_rate >= 0.5:
+            return f"✅ POSITIVE: Hit rate {hit_rate*100:.0f}% ({wins}/{total}) is >50% and significant. Strategy works. Supports BUY."
+        else:
+            return f"⚠️ NEGATIVE: Hit rate {hit_rate*100:.0f}% ({wins}/{total}) is <50% but significant. Strategy underperforms. Consider SKIP."
+    else:
+        # Not statistically significant
+        if hit_rate >= 0.6:
+            return f"⚠️ DIVERGENT: High hit rate {hit_rate*100:.0f}% but NOT statistically significant (p≥0.05). Sample may be too small. Require pattern confirmation."
+        elif hit_rate >= 0.5:
+            return f"⚠️ WEAK: Hit rate {hit_rate*100:.0f}% is >50% but NOT significant. Cannot conclude strategy works. Use pattern analysis."
+        else:
+            return f"❌ POOR: Hit rate {hit_rate*100:.0f}% ({wins}/{total}) is <50% and NOT significant. Strategy has no proven edge. SKIP."
+    
+    return "⚠️ Hit rate test inconclusive."
 

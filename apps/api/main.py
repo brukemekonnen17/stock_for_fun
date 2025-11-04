@@ -899,10 +899,29 @@ async def decision_propose(body: ProposePayload) -> ProposeResponse:
     
     # Compute evidence-first statistical analysis
     from apps.api.evidence_analysis import compute_evidence_analysis, compute_technical_indicators
+    from services.analysis.pattern_detection import detect_patterns
+    
     evidence = {}
+    pattern_info = None
     try:
         hist = market_data.daily_ohlc(body.ticker, lookback=30)
         if hist:
+            # Detect technical patterns
+            pattern_info = detect_patterns(hist, body.price)
+            
+            # Add pattern info to LLM payload
+            if pattern_info and pattern_info.get("primary_pattern"):
+                primary = pattern_info["primary_pattern"]
+                llm_payload["pattern_detected"] = json.dumps({
+                    "name": primary.get("name", ""),
+                    "type": primary.get("type", "NEUTRAL"),
+                    "confidence": primary.get("confidence", 0.0),
+                    "description": primary.get("description", ""),
+                    "target": primary.get("target", 0.0),
+                    "stop": primary.get("stop", 0.0),
+                    "implications": pattern_info.get("trading_implications", [])
+                })
+            
             evidence = compute_evidence_analysis(
                 ticker=body.ticker,
                 hist=hist,
@@ -912,6 +931,10 @@ async def decision_propose(body: ProposePayload) -> ProposeResponse:
                 days_to_event=cat.days_to_event,
                 backtest_data=perf.model_dump() if hasattr(perf, 'model_dump') else {}
             )
+            
+            # Add pattern info to evidence
+            if pattern_info:
+                evidence["patterns"] = pattern_info
     except Exception as e:
         logger.warning(f"[{body.decision_id}] Evidence analysis failed: {e}")
     

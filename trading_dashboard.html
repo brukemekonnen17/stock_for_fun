@@ -2088,6 +2088,61 @@
                     </div>
                     ` : ''}
 
+                    <!-- Technical Pattern Detection -->
+                    ${analysis.evidence && analysis.evidence.patterns && analysis.evidence.patterns.primary_pattern ? `
+                    <div class="card" style="border-left: 4px solid var(--ft-blue); margin-bottom: 24px;">
+                        <div class="card-header">
+                            <div>
+                                <div class="card-title">📈 Technical Pattern Detected</div>
+                                <div class="card-subtitle">Chart Pattern Analysis & Trading Implications</div>
+                            </div>
+                        </div>
+                        <div style="padding: 16px;">
+                            ${(() => {
+                                const pattern = analysis.evidence.patterns.primary_pattern;
+                                const typeColor = pattern.type === 'BULLISH' ? 'var(--ft-green)' : pattern.type === 'BEARISH' ? 'var(--ft-red)' : 'var(--ft-text-light)';
+                                return `
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                                        <div>
+                                            <div style="font-size: 20px; font-weight: 700; margin-bottom: 8px; color: ${typeColor};">
+                                                ${pattern.name || 'Unknown Pattern'}
+                                            </div>
+                                            <div style="font-size: 12px; color: var(--ft-text-light); margin-bottom: 12px;">
+                                                ${pattern.description || 'No description available'}
+                                            </div>
+                                            <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">
+                                                Confidence: <span style="color: ${pattern.confidence > 0.7 ? 'var(--ft-green)' : pattern.confidence > 0.5 ? 'var(--ft-orange)' : 'var(--ft-text-light)'};">${(pattern.confidence * 100).toFixed(0)}%</span>
+                                            </div>
+                                            ${pattern.target ? `
+                                                <div style="font-size: 13px; margin-bottom: 4px;">
+                                                    <strong>Target:</strong> $${pattern.target.toFixed(2)}
+                                                </div>
+                                            ` : ''}
+                                            ${pattern.stop ? `
+                                                <div style="font-size: 13px; margin-bottom: 4px;">
+                                                    <strong>Stop:</strong> $${pattern.stop.toFixed(2)}
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                        <div>
+                                            ${analysis.evidence.patterns.trading_implications && analysis.evidence.patterns.trading_implications.length > 0 ? `
+                                                <div style="font-size: 12px; font-weight: 600; margin-bottom: 8px; text-transform: uppercase; color: var(--ft-text-light);">
+                                                    Trading Implications:
+                                                </div>
+                                                ${analysis.evidence.patterns.trading_implications.map(imp => `
+                                                    <div style="font-size: 13px; line-height: 1.6; margin-bottom: 8px; padding: 8px; background: rgba(0,0,0,0.03); border-radius: 4px;">
+                                                        ${imp}
+                                                    </div>
+                                                `).join('')}
+                                            ` : ''}
+                                        </div>
+                                    </div>
+                                `;
+                            })()}
+                        </div>
+                    </div>
+                    ` : ''}
+
                     <!-- Evidence & Statistical Analysis - MOVED UP (FT Style) -->
                     ${analysis.evidence ? `
                     <div class="card" style="border-left: 4px solid var(--ft-purple); margin-bottom: 24px;">
@@ -2102,7 +2157,7 @@
                                 const badge = test.p_value !== null ? formatSignificanceBadge(test.p_value) : '';
                                 const grade = computeEffectGrade(test.p_value, test.effect_size);
                                 return `
-                                    <div class="evidence-test">
+                                    <div class="evidence-test" style="border-left: 3px solid ${test.decision_implication && test.decision_implication.includes('✅') ? 'var(--ft-green)' : test.decision_implication && test.decision_implication.includes('❌') ? 'var(--ft-red)' : 'var(--ft-text-light)'}; padding-left: 12px; margin-bottom: 16px;">
                                         <div class="evidence-header">
                                             <span class="evidence-name">${test.name}</span>
                                             <span class="evidence-badge ${grade}">${grade}</span>
@@ -2122,6 +2177,16 @@
                                             <div class="evidence-pvalue">
                                                 <span class="pvalue-label">p-value:</span>
                                                 <span class="pvalue-value ${test.p_value < 0.05 ? 'significant' : ''}">${test.p_value.toFixed(4)}</span>
+                                            </div>
+                                        ` : ''}
+                                        ${test.decision_implication ? `
+                                            <div class="evidence-decision" style="margin-top: 12px; padding: 12px; background: ${test.decision_implication.includes('✅') ? 'rgba(0,166,81,0.1)' : test.decision_implication.includes('❌') ? 'rgba(220,20,60,0.1)' : 'rgba(128,128,128,0.1)'}; border-radius: 4px; font-size: 13px; line-height: 1.5; font-weight: 500;">
+                                                <strong style="color: ${test.decision_implication.includes('✅') ? 'var(--ft-green)' : test.decision_implication.includes('❌') ? 'var(--ft-red)' : 'var(--ft-text-light)'};">
+                                                    📊 TRADING DECISION:
+                                                </strong>
+                                                <div style="margin-top: 6px; color: var(--ft-text);">
+                                                    ${test.decision_implication}
+                                                </div>
                                             </div>
                                         ` : ''}
                                     </div>
