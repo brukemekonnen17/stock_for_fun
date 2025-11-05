@@ -44,6 +44,7 @@ import logging
 import atexit
 import os
 import json
+from time import time
 from dotenv import load_dotenv
 
 # Load .env
@@ -995,22 +996,62 @@ async def decision_propose(body: ProposePayload) -> ProposeResponse:
     
     # Call Phase-1 LLM
     llm_analysis_v2 = None
+    llm_start_time = time()
+    policy_override_applied = False
     try:
         messages = build_messages(system_prompt_text, payload_for_llm)
         raw_response = await propose_trade_v2(messages)
+        
+        latency_ms = (time() - llm_start_time) * 1000
         
         if raw_response:
             ta = parse_llm_json(raw_response)
             if ta:
                 # Enforce policy and sanity checks
+                ta_before = ta.model_dump().copy()
                 ta = enforce_policy_and_sanity(ta, facts=payload_for_llm)
-                llm_analysis_v2 = ta.model_dump()
-                logger.info(f"[{body.decision_id}] Phase-1 LLM analysis parsed successfully")
+                ta_after = ta.model_dump()
+                
+                # Check if policy override changed verdicts
+                if (ta_before.get("verdict_intraday") != ta_after.get("verdict_intraday") or
+                    ta_before.get("verdict_swing_1to5d") != ta_after.get("verdict_swing_1to5d")):
+                    policy_override_applied = True
+                
+                llm_analysis_v2 = ta_after
+                confidence_raw = ta_after.get("confidence", 0.5)
+                
+                # Record telemetry
+                record_llm_metric(
+                    parse_ok=True,
+                    latency_ms=latency_ms,
+                    policy_override=policy_override_applied,
+                    confidence_raw=confidence_raw
+                )
+                
+                logger.info(f"[{body.decision_id}] Phase-1 LLM analysis parsed successfully (latency: {latency_ms:.1f}ms)")
             else:
+                # Record parse failure
+                record_llm_metric(
+                    parse_ok=False,
+                    latency_ms=latency_ms,
+                    policy_override=False
+                )
                 logger.warning(f"[{body.decision_id}] Phase-1 LLM parse failed, using fallback")
         else:
+            # Record failure
+            record_llm_metric(
+                parse_ok=False,
+                latency_ms=latency_ms,
+                policy_override=False
+            )
             logger.warning(f"[{body.decision_id}] Phase-1 LLM returned empty, using fallback")
     except Exception as e:
+        latency_ms = (time() - llm_start_time) * 1000
+        record_llm_metric(
+            parse_ok=False,
+            latency_ms=latency_ms,
+            policy_override=False
+        )
         logger.warning(f"[{body.decision_id}] Phase-1 LLM error: {e}, using fallback")
     
     # Fallback to conservative SKIP if Phase-1 LLM failed
@@ -1101,6 +1142,16 @@ async def decision_propose(body: ProposePayload) -> ProposeResponse:
     
     # Get calibrated confidence
     calibrated_confidence = calibration_service.calibrate_confidence(raw_confidence)
+    
+    # Update telemetry with calibrated confidence
+    if llm_analysis_v2:
+        record_llm_metric(
+            parse_ok=True,
+            latency_ms=0.0,  # Already recorded above
+            policy_override=policy_override_applied,
+            confidence_raw=raw_confidence,
+            confidence_calibrated=calibrated_confidence
+        )
     
     # Update LLM output with calibrated confidence
     llm_out["confidence"] = calibrated_confidence
@@ -1626,3 +1677,157 @@ def get_calibration_stats():
 @app.post("/trade/execute")
 def trade_execute(body: ExecutePayload):
     return {"status": "SIMULATED", "ticker": body.ticker, "shares": body.shares, "limit_price": body.limit_price}
+
+# ========================================
+# Action Slab Endpoints (Task C)
+# ========================================
+
+class AlertCreatePayload(StrictModel):
+    ticker: str
+    rule: dict
+    analysis: Optional[dict] = None
+    plan: Optional[dict] = None
+    llm_v2: Optional[dict] = None
+    drivers: Optional[dict] = None
+    nba_score: Optional[float] = None
+
+@app.post("/alerts/create")
+async def create_alert(body: AlertCreatePayload):
+    """
+    Create a price/condition alert.
+    Stub endpoint - logs and returns success.
+    """
+    logger.info(f"Alert created: ticker={body.ticker}, rule={body.rule}")
+    # TODO: Store alert in database, wire to notification service
+    return {
+        "status": "created",
+        "ticker": body.ticker,
+        "rule": body.rule,
+        "alert_id": f"alert_{body.ticker}_{datetime.utcnow().timestamp()}"
+    }
+
+class BriefSendPayload(StrictModel):
+    ticker: str
+    verdict: Optional[str] = None
+    summary: str
+    links: Optional[dict] = None
+    analysis: Optional[dict] = None
+    plan: Optional[dict] = None
+    llm_v2: Optional[dict] = None
+    drivers: Optional[dict] = None
+    nba_score: Optional[float] = None
+
+@app.post("/briefs/send")
+async def send_brief(body: BriefSendPayload):
+    """
+    Send a brief memo to stakeholders.
+    Stub endpoint - logs and returns success.
+    """
+    logger.info(f"Brief sent: ticker={body.ticker}, verdict={body.verdict}")
+    # TODO: Send email/Slack notification, store in CRM
+    return {
+        "status": "sent",
+        "ticker": body.ticker,
+        "brief_id": f"brief_{body.ticker}_{datetime.utcnow().timestamp()}"
+    }
+
+class DecisionCommitPayload(StrictModel):
+    analysis: dict
+    plan: dict
+    owner: str = "me"
+    due: Optional[str] = None
+    llm_v2: Optional[dict] = None
+    drivers: Optional[dict] = None
+    nba_score: Optional[float] = None
+
+@app.post("/decisions/commit")
+async def commit_decision(body: DecisionCommitPayload):
+    """
+    Commit a decision plan with owner and due date.
+    Stub endpoint - logs and returns success.
+    """
+    ticker = body.analysis.get("ticker") or body.plan.get("ticker", "UNKNOWN")
+    logger.info(f"Decision committed: ticker={ticker}, owner={body.owner}, due={body.due}")
+    # TODO: Store in database, create task in project management system
+    return {
+        "status": "committed",
+        "ticker": ticker,
+        "owner": body.owner,
+        "due": body.due,
+        "decision_id": f"decision_{ticker}_{datetime.utcnow().timestamp()}"
+    }
+
+# ========================================
+# LLM Quality Telemetry (Task 4)
+# ========================================
+
+from collections import deque
+import threading
+
+_llm_metrics = {
+    "parse_ok": deque(maxlen=1000),
+    "parse_fail": deque(maxlen=1000),
+    "latency_ms": deque(maxlen=1000),
+    "policy_override": deque(maxlen=1000),
+    "confidence_raw": deque(maxlen=1000),
+    "confidence_calibrated": deque(maxlen=1000)
+}
+_metrics_lock = threading.Lock()
+
+def record_llm_metric(
+    parse_ok: bool,
+    latency_ms: float,
+    policy_override: bool = False,
+    confidence_raw: Optional[float] = None,
+    confidence_calibrated: Optional[float] = None
+):
+    """Record LLM quality metrics for telemetry."""
+    with _metrics_lock:
+        if parse_ok:
+            _llm_metrics["parse_ok"].append(time())
+        else:
+            _llm_metrics["parse_fail"].append(time())
+        
+        _llm_metrics["latency_ms"].append(latency_ms)
+        _llm_metrics["policy_override"].append(1 if policy_override else 0)
+        
+        if confidence_raw is not None:
+            _llm_metrics["confidence_raw"].append(confidence_raw)
+        if confidence_calibrated is not None:
+            _llm_metrics["confidence_calibrated"].append(confidence_calibrated)
+
+@app.get("/metrics/llm_phase1")
+def get_llm_metrics():
+    """
+    Get LLM Phase-1 quality telemetry.
+    Returns rolling counts and p95 latency.
+    """
+    with _metrics_lock:
+        parse_ok_count = len(_llm_metrics["parse_ok"])
+        parse_fail_count = len(_llm_metrics["parse_fail"])
+        total = parse_ok_count + parse_fail_count
+        parse_rate = parse_ok_count / total if total > 0 else 1.0
+        
+        latencies = list(_llm_metrics["latency_ms"])
+        p95_latency = sorted(latencies)[int(len(latencies) * 0.95)] if latencies else 0.0
+        median_latency = sorted(latencies)[len(latencies) // 2] if latencies else 0.0
+        
+        policy_overrides = list(_llm_metrics["policy_override"])
+        override_rate = sum(policy_overrides) / len(policy_overrides) if policy_overrides else 0.0
+        
+        conf_raw = list(_llm_metrics["confidence_raw"])
+        conf_cal = list(_llm_metrics["confidence_calibrated"])
+        
+        return {
+            "schema": "LLMMetricsV1",
+            "parse_rate": parse_rate,
+            "parse_ok_count": parse_ok_count,
+            "parse_fail_count": parse_fail_count,
+            "total_requests": total,
+            "p95_latency_ms": p95_latency,
+            "median_latency_ms": median_latency,
+            "policy_override_rate": override_rate,
+            "avg_confidence_raw": sum(conf_raw) / len(conf_raw) if conf_raw else 0.0,
+            "avg_confidence_calibrated": sum(conf_cal) / len(conf_cal) if conf_cal else 0.0,
+            "window_size": 1000
+        }

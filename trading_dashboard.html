@@ -1546,12 +1546,14 @@
             
             if (!btnCreateAlert || !btnSendBrief || !btnCommitPlan) return;
             
-            function postJSON(url, body) {
-                return fetch(`${API_BASE}${url}`, {
+            async function postJSON(url, body) {
+                const r = await fetch(`${API_BASE}${url}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(body)
                 });
+                const data = await r.json().catch(() => ({}));
+                return { ok: r.ok, status: r.status, data: data };
             }
             
             function toast(message) {
@@ -1563,41 +1565,74 @@
             }
             
             btnCreateAlert.onclick = async () => {
+                const ticker = analysis.ticker || analysis.analysis?.ticker;
                 const payload = {
-                    ticker: analysis.ticker || analysis.analysis?.ticker,
-                    rule: { type: 'price_cross', level: plan.entry_price || plan.target_price }
+                    ticker: ticker,
+                    rule: { type: 'price_cross', level: plan.entry_price || plan.target_price },
+                    analysis: analysis,
+                    plan: plan,
+                    llm_v2: analysis.llm_v2 || analysis.analysis?.llm_v2,
+                    drivers: analysis.drivers || analysis.analysis?.drivers,
+                    nba_score: analysis.nba_score || analysis.analysis?.nba_score
                 };
                 try {
-                    await postJSON('/alerts/create', payload);
-                    toast('✅ Alert created for entry level');
+                    const r = await postJSON('/alerts/create', payload);
+                    if (r.ok) {
+                        toast('✅ Alert created for entry level');
+                    } else {
+                        toast('⚠️ Alert creation failed');
+                    }
                 } catch (e) {
-                    toast('⚠️ Alert creation failed (stub endpoint)');
+                    toast('⚠️ Alert creation failed: ' + e.message);
                 }
             };
             
             btnSendBrief.onclick = async () => {
+                const ticker = analysis.ticker || analysis.analysis?.ticker;
                 const memo = {
-                    ticker: analysis.ticker || analysis.analysis?.ticker,
+                    ticker: ticker,
                     verdict: plan?.action || plan?.verdict || analysis?.strategy?.selected_arm,
                     summary: analysis?.quick_take || plan?.reason || 'See evidence cards.',
-                    links: { decision: location.href }
+                    links: { decision: location.href },
+                    analysis: analysis,
+                    plan: plan,
+                    llm_v2: analysis.llm_v2 || analysis.analysis?.llm_v2,
+                    drivers: analysis.drivers || analysis.analysis?.drivers,
+                    nba_score: analysis.nba_score || analysis.analysis?.nba_score
                 };
                 try {
-                    await postJSON('/briefs/send', memo);
-                    toast('✅ Brief sent');
+                    const r = await postJSON('/briefs/send', memo);
+                    if (r.ok) {
+                        toast('✅ Brief sent');
+                    } else {
+                        toast('⚠️ Brief sending failed');
+                    }
                 } catch (e) {
-                    toast('⚠️ Brief sending failed (stub endpoint)');
+                    toast('⚠️ Brief sending failed: ' + e.message);
                 }
             };
             
             btnCommitPlan.onclick = async () => {
                 const owner = document.getElementById('ownerSelect')?.value || 'me';
                 const due = document.getElementById('dueDate')?.value || null;
+                const payload = {
+                    analysis: analysis,
+                    plan: plan,
+                    owner: owner,
+                    due: due,
+                    llm_v2: analysis.llm_v2 || analysis.analysis?.llm_v2,
+                    drivers: analysis.drivers || analysis.analysis?.drivers,
+                    nba_score: analysis.nba_score || analysis.analysis?.nba_score
+                };
                 try {
-                    await postJSON('/decisions/commit', { analysis, plan, owner, due });
-                    toast('✅ Decision committed');
+                    const r = await postJSON('/decisions/commit', payload);
+                    if (r.ok) {
+                        toast('✅ Decision committed');
+                    } else {
+                        toast('⚠️ Decision commit failed');
+                    }
                 } catch (e) {
-                    toast('⚠️ Decision commit failed (stub endpoint)');
+                    toast('⚠️ Decision commit failed: ' + e.message);
                 }
             };
         }
