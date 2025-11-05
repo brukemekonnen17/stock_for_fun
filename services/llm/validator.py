@@ -48,5 +48,15 @@ def enforce_policy_and_sanity(ta: TradeAnalysisV2, facts: dict) -> TradeAnalysis
     except Exception:
         pass
 
+    # 5) Breadth downgrade: if CAR not significant and participation LOW, never auto BUY intraday
+    try:
+        car_sig = bool(facts.get("evidence", {}).get("event_study", {}).get("significant", False))
+        part_q = (ta.participation or {}).get("quality", "LOW").upper()
+        if (not car_sig) and part_q == "LOW" and ta.verdict_intraday == "BUY":
+            ta.verdict_intraday = "REACTIVE"
+            _add_warning(ta, "Breadth downgrade: non-significant CAR + LOW participation")
+    except Exception:
+        pass
+
     return ta
 

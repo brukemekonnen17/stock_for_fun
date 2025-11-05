@@ -1198,6 +1198,193 @@
         ::-webkit-scrollbar-thumb:hover {
             background: var(--ft-text-light);
         }
+
+        /* Chip styles for calibration chip */
+        .chip {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+
+        .chip-muted {
+            background: rgba(255,255,255,0.1);
+            color: rgba(255,255,255,0.7);
+        }
+
+        .chip-green {
+            background: rgba(0,166,81,0.15);
+            color: var(--ft-green);
+        }
+
+        .chip-yellow {
+            background: rgba(255,193,7,0.15);
+            color: var(--ft-yellow);
+        }
+
+        .chip-red {
+            background: rgba(220,20,60,0.15);
+            color: var(--ft-red);
+        }
+
+        /* Opportunities Sidebar Styles */
+        .sidebar {
+            width: 320px;
+            min-width: 300px;
+            max-width: 380px;
+            background: var(--surface-color);
+            border-right: 1px solid rgba(255,255,255,0.06);
+            position: fixed;
+            left: 0;
+            top: 80px;
+            bottom: 0;
+            overflow-y: auto;
+        }
+
+        .sidebar-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+
+        .sidebar-header h2 {
+            font-size: 16px;
+            font-weight: 700;
+            margin: 0;
+        }
+
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 12px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 4px;
+            color: white;
+            cursor: pointer;
+        }
+
+        .btn-small:hover {
+            background: rgba(255,255,255,0.15);
+        }
+
+        .opps-list {
+            padding: 8px 8px 16px;
+            overflow-y: auto;
+            max-height: calc(100vh - 96px);
+        }
+
+        .opp-row {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 6px;
+            align-items: center;
+            padding: 10px 12px;
+            border-radius: 8px;
+            margin: 6px 0;
+            background: rgba(255,255,255,0.03);
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .opp-row:hover {
+            background: rgba(255,255,255,0.06);
+        }
+
+        .opp-ticker {
+            font-weight: 600;
+            letter-spacing: 0.2px;
+            font-size: 14px;
+        }
+
+        .opp-sub {
+            font-size: 12px;
+            opacity: 0.85;
+            margin-top: 4px;
+        }
+
+        .pill.pill-nba {
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: rgba(79,70,229,0.14);
+            color: rgba(147,197,253,1);
+            font-weight: 600;
+        }
+
+        /* Pill styles for alignment */
+        .pill {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .pill-muted {
+            background: rgba(255,255,255,0.10);
+            color: rgba(255,255,255,0.7);
+        }
+
+        .pill-green {
+            background: rgba(34,197,94,0.20);
+            color: #22c55e;
+        }
+
+        .pill-yellow {
+            background: rgba(234,179,8,0.20);
+            color: #eab308;
+        }
+
+        .pill-red {
+            background: rgba(239,68,68,0.20);
+            color: #ef4444;
+        }
+
+        /* Drivers legend styles */
+        .drivers-row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+            padding: 8px 0;
+        }
+
+        .driver-chip {
+            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.08);
+            transition: all 0.2s;
+        }
+
+        .driver-chip .k {
+            opacity: 0.8;
+            margin-right: 6px;
+        }
+
+        .driver-chip.positive {
+            background: rgba(34,197,94,0.15);
+            color: #22c55e;
+        }
+
+        .driver-chip.neutral {
+            background: rgba(234,179,8,0.15);
+            color: #eab308;
+        }
+
+        .driver-chip.negative {
+            background: rgba(239,68,68,0.15);
+            color: #ef4444;
+        }
+
+        /* Adjust container to account for sidebar */
+        .container {
+            margin-left: 320px;
+        }
     </style>
 </head>
 <body>
@@ -1208,6 +1395,15 @@
             <span>Enterprise Analytics Platform</span>
         </div>
     </div>
+
+    <!-- Opportunities Sidebar -->
+    <aside id="opportunities-sidebar" class="sidebar">
+        <header class="sidebar-header">
+            <h2>Opportunities</h2>
+            <button id="btnRefreshOpps" class="btn btn-small">Refresh</button>
+        </header>
+        <div id="opportunities-list" class="opps-list"></div>
+    </aside>
 
     <div class="container">
         <!-- DEBUG PANEL (Only shown with ?debug=1) -->
@@ -1319,6 +1515,41 @@
         // ========================================
         
         // Safe Plotly render function (prevents black charts)
+        // Formatters for consistent unit display
+        const fmt = {
+            pct: (x) => (x == null || x === undefined || isNaN(x) ? 'N/A' : `${(x * 100).toFixed(1)}%`),
+            bps: (x) => (x == null || x === undefined || isNaN(x) ? 'N/A' : `${(x * 10000).toFixed(0)} bps`),
+            usd: (x) => (x == null || x === undefined || isNaN(x) ? 'N/A' : `$${x.toLocaleString(undefined, {maximumFractionDigits: 2})}`),
+            int: (x) => (x == null || x === undefined || isNaN(x) ? 'N/A' : `${Math.round(x)}`),
+            ts: (ms) => (ms ? new Date(ms).toLocaleTimeString() : '—')
+        };
+
+        // Render calibration chip
+        async function renderCalibrationChip() {
+            try {
+                const r = await fetch(`${API_BASE}/stats/calibration`);
+                if (!r.ok) return;
+                const data = await r.json();
+                const { ece, brier } = data;
+                const chip = document.getElementById('calibration-chip');
+                if (!chip) return;
+                chip.textContent = `Calibrated • ECE ${ece.toFixed(3)} • Brier ${brier.toFixed(2)}`;
+                chip.classList.remove('chip-muted');
+                if (ece < 0.08) {
+                    chip.classList.add('chip-green');
+                    chip.classList.remove('chip-yellow', 'chip-red');
+                } else if (ece < 0.15) {
+                    chip.classList.add('chip-yellow');
+                    chip.classList.remove('chip-green', 'chip-red');
+                } else {
+                    chip.classList.add('chip-red');
+                    chip.classList.remove('chip-green', 'chip-yellow');
+                }
+            } catch (e) {
+                console.warn('Failed to fetch calibration:', e);
+            }
+        }
+
         function safePlot(id, data, layout) {
             const el = document.getElementById(id);
             if (!el) {
@@ -1361,8 +1592,12 @@
 
         // Candles + EMA20/50 + BB + 10-day band
         function renderCandlesPanel(series) {
+            const el = document.getElementById('panel-candles');
             if (!series || !series.dates || !series.close || !series.close.length) {
                 console.warn('No series data for candles panel');
+                if (el) {
+                    el.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--ft-text-light); font-size: 14px;">No price data available</div>';
+                }
                 return;
             }
             
@@ -1407,8 +1642,12 @@
 
         // Event-study CAR ± CI
         function renderCarPanel(car) {
+            const el = document.getElementById('panel-car');
             if (!car || !car.length) {
                 console.warn('No CAR data for panel');
+                if (el) {
+                    el.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--ft-text-light); font-size: 14px;">No CAR data available</div>';
+                }
                 return;
             }
             
@@ -1437,8 +1676,12 @@
 
         // R-distribution (per arm) with Median marker
         function renderRDistPanel(armStats) {
+            const el = document.getElementById('panel-rdist');
             if (!armStats || !armStats.samples || armStats.samples === 0) {
                 console.warn('No arm stats data for R-distribution panel');
+                if (el) {
+                    el.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--ft-text-light); font-size: 14px;">No R-distribution data available</div>';
+                }
                 return;
             }
             
@@ -1538,6 +1781,21 @@
             }
         }
 
+        // Standard decision payload (single source of truth)
+        function standardDecisionPayload(analysis, plan, alignment) {
+            const analysisData = analysis.analysis || analysis;
+            return {
+                ticker: analysisData.ticker || plan.ticker,
+                decision_id: analysis.decision_id || null,
+                plan: plan,
+                alignment: alignment || analysisData.alignment || 'UNKNOWN',
+                llm_v2: analysisData.llm_v2 || null,
+                drivers: analysisData.drivers || null,
+                nba_score: analysisData.nba_score ?? null,
+                timestamp_ms: Date.now()
+            };
+        }
+
         // Wire action slab handlers
         function wireActionSlab(analysis, plan) {
             const btnCreateAlert = document.getElementById('btnCreateAlert');
@@ -1556,83 +1814,63 @@
                 return { ok: r.ok, status: r.status, data: data };
             }
             
-            function toast(message) {
+            function toast(message, type = 'success') {
                 const toastEl = document.createElement('div');
-                toastEl.style.cssText = 'position:fixed;top:20px;right:20px;padding:12px 20px;background:#10b981;color:white;border-radius:4px;z-index:10000;font-size:14px;';
+                const bgColor = type === 'success' ? '#10b981' : '#ef4444';
+                toastEl.style.cssText = `position:fixed;top:20px;right:20px;padding:12px 20px;background:${bgColor};color:white;border-radius:4px;z-index:10000;font-size:14px;`;
                 toastEl.textContent = message;
                 document.body.appendChild(toastEl);
                 setTimeout(() => toastEl.remove(), 3000);
             }
             
+            const analysisData = analysis.analysis || analysis;
+            const alignment = analysisData.alignment || 'UNKNOWN';
+            
             btnCreateAlert.onclick = async () => {
-                const ticker = analysis.ticker || analysis.analysis?.ticker;
-                const payload = {
-                    ticker: ticker,
-                    rule: { type: 'price_cross', level: plan.entry_price || plan.target_price },
-                    analysis: analysis,
-                    plan: plan,
-                    llm_v2: analysis.llm_v2 || analysis.analysis?.llm_v2,
-                    drivers: analysis.drivers || analysis.analysis?.drivers,
-                    nba_score: analysis.nba_score || analysis.analysis?.nba_score
-                };
+                const body = standardDecisionPayload(analysis, plan, alignment);
+                body.rule = { type: 'price_cross', level: plan.entry_price || plan.target_price };
                 try {
-                    const r = await postJSON('/alerts/create', payload);
+                    const r = await postJSON('/alerts/create', body);
                     if (r.ok) {
                         toast('✅ Alert created for entry level');
                     } else {
-                        toast('⚠️ Alert creation failed');
+                        toast('⚠️ Alert creation failed', 'error');
                     }
                 } catch (e) {
-                    toast('⚠️ Alert creation failed: ' + e.message);
+                    toast('⚠️ Alert creation failed: ' + e.message, 'error');
                 }
             };
             
             btnSendBrief.onclick = async () => {
-                const ticker = analysis.ticker || analysis.analysis?.ticker;
-                const memo = {
-                    ticker: ticker,
-                    verdict: plan?.action || plan?.verdict || analysis?.strategy?.selected_arm,
-                    summary: analysis?.quick_take || plan?.reason || 'See evidence cards.',
-                    links: { decision: location.href },
-                    analysis: analysis,
-                    plan: plan,
-                    llm_v2: analysis.llm_v2 || analysis.analysis?.llm_v2,
-                    drivers: analysis.drivers || analysis.analysis?.drivers,
-                    nba_score: analysis.nba_score || analysis.analysis?.nba_score
-                };
+                const body = standardDecisionPayload(analysis, plan, alignment);
+                body.verdict = plan?.action || plan?.verdict || analysisData?.strategy?.selected_arm;
+                body.summary = analysisData?.quick_take || plan?.reason || 'See evidence cards.';
+                body.links = { decision: location.href };
                 try {
-                    const r = await postJSON('/briefs/send', memo);
+                    const r = await postJSON('/briefs/send', body);
                     if (r.ok) {
                         toast('✅ Brief sent');
                     } else {
-                        toast('⚠️ Brief sending failed');
+                        toast('⚠️ Brief sending failed', 'error');
                     }
                 } catch (e) {
-                    toast('⚠️ Brief sending failed: ' + e.message);
+                    toast('⚠️ Brief sending failed: ' + e.message, 'error');
                 }
             };
             
             btnCommitPlan.onclick = async () => {
-                const owner = document.getElementById('ownerSelect')?.value || 'me';
-                const due = document.getElementById('dueDate')?.value || null;
-                const payload = {
-                    analysis: analysis,
-                    plan: plan,
-                    owner: owner,
-                    due: due,
-                    llm_v2: analysis.llm_v2 || analysis.analysis?.llm_v2,
-                    drivers: analysis.drivers || analysis.analysis?.drivers,
-                    nba_score: analysis.nba_score || analysis.analysis?.nba_score
-                };
+                const body = standardDecisionPayload(analysis, plan, alignment);
+                body.owner = document.getElementById('ownerSelect')?.value || 'me';
+                body.due = document.getElementById('dueDate')?.value || null;
                 try {
-                    const r = await postJSON('/decisions/commit', payload);
+                    const r = await postJSON('/decisions/commit', body);
                     if (r.ok) {
                         toast('✅ Decision committed');
                     } else {
-                        toast('⚠️ Decision commit failed');
+                        toast('⚠️ Decision commit failed', 'error');
                     }
                 } catch (e) {
-                    toast('⚠️ Decision commit failed: ' + e.message);
+                    toast('⚠️ Decision commit failed: ' + e.message, 'error');
                 }
             };
         }
@@ -2001,23 +2239,35 @@
 
             const ticker = analysis.ticker || plan.ticker;
             
-            // Extract confidence from multiple possible locations with debugging - MUST BE BEFORE ANY USE
-            const rawConfidence = plan.confidence !== undefined && plan.confidence !== null ? plan.confidence :
+            // Extract Phase-1 LLM verdicts (intraday and swing)
+            const verdictIntraday = analysis.llm_v2?.verdict_intraday || plan.action || 'SKIP';
+            const verdictSwing = analysis.llm_v2?.verdict_swing_1to5d || 'SKIP';
+            
+            // Extract confidence from Phase-1 LLM output (llm_v2) first, then fallbacks
+            // Priority: llm_v2.confidence > plan.confidence > legacy llm_confidence > default 0.5
+            const rawConfidence = analysis.llm_v2?.confidence !== undefined && analysis.llm_v2?.confidence !== null ? analysis.llm_v2.confidence :
+                                 plan.confidence !== undefined && plan.confidence !== null ? plan.confidence :
                                  analysis.llm_confidence !== undefined && analysis.llm_confidence !== null ? analysis.llm_confidence :
+                                 data.analysis?.llm_v2?.confidence !== undefined && data.analysis?.llm_v2?.confidence !== null ? data.analysis.llm_v2.confidence :
                                  data.plan?.confidence !== undefined && data.plan?.confidence !== null ? data.plan.confidence :
                                  data.analysis?.llm_confidence !== undefined && data.analysis?.llm_confidence !== null ? data.analysis.llm_confidence :
                                  0.5;
             
             const finalConfidence = Math.max(0.0, Math.min(1.0, rawConfidence));
             
+            // Extract LLM rationale from Phase-1 output
+            const llmRationale = analysis.llm_v2?.plan?.rationale || plan.reason || strategy.reason || 'No reasoning provided by the AI for ' + ticker + '.';
+            
             // Debug confidence extraction
             console.log('Confidence extraction:', {
+                'analysis.llm_v2?.confidence': analysis.llm_v2?.confidence,
                 'plan.confidence': plan.confidence,
                 'analysis.llm_confidence': analysis.llm_confidence,
-                'data.plan?.confidence': data.plan?.confidence,
-                'data.analysis?.llm_confidence': data.analysis?.llm_confidence,
+                'data.analysis?.llm_v2?.confidence': data.analysis?.llm_v2?.confidence,
                 'rawConfidence': rawConfidence,
-                'finalConfidence': finalConfidence
+                'finalConfidence': finalConfidence,
+                'verdictIntraday': verdictIntraday,
+                'verdictSwing': verdictSwing
             });
             
             // Fetch surge analysis and history data
@@ -2059,13 +2309,15 @@
             const memeSignal = surgeData?.social?.meme_signal || 
                 (social.mention_count_total > 50 && social.sentiment_score > 0.5);
             
-            // Pattern vs Catalyst analysis
+            // Pattern vs Catalyst analysis (use computed alignment from backend if available)
             const patternExpectation = pricePosition > 80 ? 'Breakout Expected' : 
                                       pricePosition < 20 ? 'Bounce Expected' : 'Range Bound';
             const catalystExpectation = catalyst.days_to_event < 7 ? 'High Impact' : 
                                        catalyst.days_to_event < 30 ? 'Moderate Impact' : 'Low Near-term Impact';
-            const alignment = (patternExpectation.includes('Breakout') && catalyst.days_to_event < 7) ? 'ALIGNED' :
-                             (patternExpectation.includes('Bounce') && catalyst.days_to_event < 30) ? 'ALIGNED' : 'MISALIGNED';
+            // Use backend-computed alignment if available, otherwise compute client-side fallback
+            const alignment = analysis.alignment || 
+                             ((patternExpectation.includes('Breakout') && catalyst.days_to_event < 7) ? 'ALIGNED' :
+                             (patternExpectation.includes('Bounce') && catalyst.days_to_event < 30) ? 'ALIGNED' : 'MISALIGNED');
             
             // Evaluate triggered conditions
             const triggers = evaluateTriggeredConditions({
@@ -2127,10 +2379,10 @@
                 content.innerHTML = `
                     <!-- Decision Bar -->
                     <div class="decision-bar">
-                        <div class="verdict-badge ${plan.action}">${plan.action}</div>
+                        <div class="verdict-badge ${verdictIntraday}">${verdictIntraday}</div>
                         <div>
                             <div class="ticker-display">${ticker}</div>
-                            <div style="font-size: 14px; opacity: 0.8; margin-top: 4px;">${strategy.reason || 'No strategy rationale available for ' + ticker}</div>
+                            <div style="font-size: 14px; opacity: 0.8; margin-top: 4px;">${llmRationale}</div>
                             ${triggers.length > 0 ? `
                             <div class="triggered-conditions">
                                 ${triggers.slice(0, 3).map(t => `
@@ -2147,16 +2399,20 @@
                             <div class="confidence-bar">
                                 <div class="confidence-fill" style="width: ${finalConfidence * 100}%"></div>
                             </div>
+                            <span id="calibration-chip" class="chip chip-muted" style="display: inline-block; margin-top: 8px; padding: 4px 8px; font-size: 10px; border-radius: 4px; background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.7);">Calibrating…</span>
                         </div>
                         <div style="text-align: right;">
                             <div style="font-size: 32px; font-weight: 700; font-family: 'Playfair Display', serif;">$${market.price?.toFixed(2) || plan.entry_price?.toFixed(2) || 'N/A'}</div>
                             <div style="font-size: 12px; opacity: 0.8; margin-top: 4px;">Current Price</div>
+                            <div style="margin-top: 8px;">
+                                <span id="alignment-pill" class="pill pill-muted" title="Pattern × Participation × CAR">Alignment</span>
+                            </div>
                         </div>
                         <div class="action-buttons">
-                            <button class="action-btn primary" onclick="createAlert('${ticker}', '${plan.action}')" title="Create price/condition alert">
+                            <button class="action-btn primary" onclick="createAlert('${ticker}', '${verdictIntraday}')" title="Create price/condition alert">
                                 🔔 Alert
                             </button>
-                            <button class="action-btn" onclick="logToCRM('${ticker}', '${plan.action}', ${finalConfidence}, '${(plan.reason || '').substring(0, 50)}...')" title="Log decision to CRM">
+                            <button class="action-btn" onclick="logToCRM('${ticker}', '${verdictIntraday}', ${finalConfidence}, '${(llmRationale || '').substring(0, 50)}...')" title="Log decision to CRM">
                                 📝 Log
                             </button>
                             <button class="action-btn" onclick="exportDecisionMemo('${ticker}', currentAnalysis)" title="Export decision memo">
@@ -2170,6 +2426,9 @@
                             </div>
                         ` : ''}
                     </div>
+                    
+                    <!-- Drivers Legend Chips (Pattern, Participation, Sector RS, IV−RV, Meme) -->
+                    <div id="drivers-legend" class="drivers-row" style="margin-bottom: 16px;"></div>
                     
                     <!-- Action Slab: Assign, Due Date, Create Alert, Send Brief, Commit Plan -->
                     <div class="action-slab" style="display: flex; align-items: center; gap: 12px; padding: 16px; background: white; border-radius: 8px; margin-bottom: 24px; flex-wrap: wrap;">
@@ -2302,16 +2561,31 @@
                         </div>
                     </div>
                     
-                    <!-- Alignment Card (Full Width) -->
-                    <div class="card" style="padding: 16px; margin-bottom: 24px; border-left: 4px solid ${alignment === 'ALIGNED' ? 'var(--ft-green)' : 'var(--ft-orange)'};">
-                        <div style="font-size: 11px; text-transform: uppercase; color: var(--ft-text-light); margin-bottom: 8px; font-weight: 600;">
-                            Pattern vs Catalyst Alignment
-                        </div>
-                        <div style="font-size: 24px; font-weight: 700; margin-bottom: 8px; color: ${alignment === 'ALIGNED' ? 'var(--ft-green)' : 'var(--ft-orange)'};">
-                            ${alignment === 'ALIGNED' ? '✓ Aligned' : '⚠️ Misaligned'}
-                        </div>
-                        <div style="font-size: 12px; color: var(--ft-text-light);">${alignment === 'ALIGNED' ? 'Technical pattern and catalyst event are aligned for ' + ticker : 'Technical pattern and catalyst event show misalignment for ' + ticker}</div>
-                    </div>
+                    <!-- Alignment Card (Full Width) - Use computed alignment from backend -->
+                    ${(() => {
+                        const computedAlignment = analysis.alignment || alignment || 'UNKNOWN';
+                        const alignmentColor = computedAlignment === 'ALIGNED' ? 'var(--ft-green)' : 
+                                             computedAlignment === 'MIXED' ? 'var(--ft-yellow)' : 
+                                             computedAlignment === 'MISALIGNED' ? 'var(--ft-orange)' : 'var(--ft-text-light)';
+                        const alignmentText = computedAlignment === 'ALIGNED' ? '✓ Aligned' : 
+                                            computedAlignment === 'MIXED' ? '⚠️ Mixed' : 
+                                            computedAlignment === 'MISALIGNED' ? '⚠️ Misaligned' : '❓ Unknown';
+                        const alignmentDesc = computedAlignment === 'ALIGNED' ? 'Technical pattern, participation quality, and CAR significance are aligned for ' + ticker :
+                                            computedAlignment === 'MIXED' ? 'Partial alignment between pattern, participation, and CAR for ' + ticker :
+                                            computedAlignment === 'MISALIGNED' ? 'Pattern, participation, and CAR show misalignment for ' + ticker :
+                                            'Alignment cannot be determined for ' + ticker;
+                        return `
+                            <div class="card" style="padding: 16px; margin-bottom: 24px; border-left: 4px solid ${alignmentColor};">
+                                <div style="font-size: 11px; text-transform: uppercase; color: var(--ft-text-light); margin-bottom: 8px; font-weight: 600;">
+                                    Alignment Verdict
+                                </div>
+                                <div style="font-size: 24px; font-weight: 700; margin-bottom: 8px; color: ${alignmentColor};">
+                                    ${alignmentText}
+                                </div>
+                                <div style="font-size: 12px; color: var(--ft-text-light);">${alignmentDesc}</div>
+                            </div>
+                        `;
+                    })()}
 
                     <!-- What-If Sensitivity Analysis -->
                     <div class="what-if-panel">
@@ -2694,7 +2968,12 @@
                         <!-- AI Reasoning -->
                         <div class="reasoning-section">
                             <div class="card-title" style="margin-bottom: 16px;">AI Trader Analysis</div>
-                            <div class="reasoning-text">${plan.reason || 'No reasoning provided by the AI for ' + ticker + '.'}</div>
+                            <div class="reasoning-text">${llmRationale}</div>
+                            ${verdictSwing !== 'SKIP' && verdictSwing !== verdictIntraday ? `
+                                <div style="margin-top: 12px; padding: 12px; background: rgba(0,0,0,0.03); border-radius: 4px; font-size: 13px;">
+                                    <strong>Swing (1-5d):</strong> ${verdictSwing}
+                                </div>
+                            ` : ''}
                         </div>
 
                         <!-- Strategy Rationale -->
@@ -2856,6 +3135,19 @@
             
             // Wire action slab handlers
             wireActionSlab(data, plan);
+            
+            // Render calibration chip
+            renderCalibrationChip();
+            
+            // Render alignment pill
+            renderAlignmentPill(analysis.alignment || alignment);
+            
+            // Render drivers legend
+            renderDriversLegend(analysis.drivers);
+            
+            // Store analysis and plan globally for action slab
+            window.__analysis = data;
+            window.__plan = plan;
             
             // Render evidence panels after DOM is updated
             requestAnimationFrame(() => {
@@ -3098,17 +3390,130 @@
             }
         }
 
-        async function fetchScanList() {
+        async function fetchOpportunities() {
             try {
-                const response = await fetch(`${API_BASE}/scan`);
-                const data = await response.json();
-                console.log('Opportunities loaded:', data.length);
+                const r = await fetch(`${API_BASE}/scan?min_rank=70&limit=25`);
+                if (!r.ok) return [];
+                const arr = await r.json();
+                return arr.map(x => ({ ...x, nba_score: x.nba_score ?? 0 }));
             } catch (error) {
                 console.error('Failed to fetch opportunities:', error);
+                return [];
             }
         }
 
-        fetchScanList();
+        function renderOpportunities(list) {
+            const host = document.getElementById('opportunities-list');
+            if (!host) return;
+            
+            list.sort((a, b) => (b.nba_score ?? 0) - (a.nba_score ?? 0));
+            host.innerHTML = '';
+            
+            if (!list || list.length === 0) {
+                host.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--ft-text-light);">No opportunities found</div>';
+                return;
+            }
+            
+            for (const it of list) {
+                const row = document.createElement('div');
+                row.className = 'opp-row';
+                row.innerHTML = `
+                    <div>
+                        <div class="opp-ticker">${it.ticker ?? it.symbol ?? '—'}</div>
+                        <div class="opp-sub">
+                            EM ${fmt.pct(it.expected_move ?? it.em ?? 0)}
+                            • Spread ${fmt.bps(it.spread ?? 0)}
+                            • RSI ${fmt.int(it.rsi14 ?? it.rsi ?? null)}
+                        </div>
+                    </div>
+                    <span class="pill pill-nba">NBA ${(it.nba_score ?? 0).toFixed(2)}</span>
+                `;
+                row.onclick = () => analyzeStock(it.ticker ?? it.symbol);
+                host.appendChild(row);
+            }
+        }
+
+        // Alias for backward compatibility
+        async function fetchScanList() {
+            const opps = await fetchOpportunities();
+            renderOpportunities(opps);
+        }
+
+        // Render alignment pill
+        function renderAlignmentPill(alignment) {
+            const el = document.getElementById('alignment-pill');
+            if (!el) return;
+            const a = (alignment || 'UNKNOWN').toUpperCase();
+            el.textContent = a.charAt(0) + a.slice(1).toLowerCase();
+            el.classList.remove('pill-green', 'pill-yellow', 'pill-red', 'pill-muted');
+            if (a === 'ALIGNED') el.classList.add('pill-green');
+            else if (a === 'MIXED') el.classList.add('pill-yellow');
+            else if (a === 'MISALIGNED') el.classList.add('pill-red');
+            else el.classList.add('pill-muted');
+        }
+
+        // Classify driver value for color coding
+        function classifyDriver(key, value) {
+            switch (key) {
+                case 'pattern':
+                    return /BREAKOUT|PULLBACK/i.test(value || '') ? 'positive' : (value === 'CANDIDATE' ? 'neutral' : 'negative');
+                case 'participation':
+                    return value === 'HIGH' ? 'positive' : (value === 'MEDIUM' ? 'neutral' : 'negative');
+                case 'sector_relative_strength':
+                    if (value == null) return 'neutral';
+                    return value > 0.15 ? 'positive' : (Math.abs(value) <= 0.15 ? 'neutral' : 'negative');
+                case 'iv_minus_rv':
+                    if (value == null) return 'neutral';
+                    return value >= 0.0 ? 'positive' : 'negative';
+                case 'meme_risk':
+                    return value === 'CONFIRMING' ? 'positive' : (value === 'NOISE' ? 'neutral' : 'negative');
+                default:
+                    return 'neutral';
+            }
+        }
+
+        // Render drivers legend
+        function renderDriversLegend(drivers) {
+            const host = document.getElementById('drivers-legend');
+            if (!host) return;
+            host.innerHTML = '';
+            
+            if (!drivers || typeof drivers !== 'object') {
+                host.textContent = '—';
+                return;
+            }
+            
+            const mapping = [
+                ['pattern', 'Pattern'],
+                ['participation', 'Participation'],
+                ['sector_relative_strength', 'Sector RS'],
+                ['iv_minus_rv', 'IV−RV'],
+                ['meme_risk', 'Meme']
+            ];
+            
+            for (const [k, label] of mapping) {
+                const val = drivers[k];
+                const chip = document.createElement('span');
+                const mood = classifyDriver(k, val);
+                chip.className = `driver-chip ${mood}`;
+                chip.innerHTML = `<span class="k">${label}</span> ${val == null ? 'N/A' : (typeof val === 'number' ? (k === 'iv_minus_rv' ? fmt.pct(val) : val.toFixed(2)) : String(val))}`;
+                host.appendChild(chip);
+            }
+        }
+
+        // Wire refresh button
+        document.addEventListener('DOMContentLoaded', () => {
+            const btnRefresh = document.getElementById('btnRefreshOpps');
+            if (btnRefresh) {
+                btnRefresh.addEventListener('click', async () => {
+                    const opps = await fetchOpportunities();
+                    renderOpportunities(opps);
+                });
+            }
+        });
+
+        // Initial load
+        fetchOpportunities().then(renderOpportunities).catch(() => {});
     </script>
 </body>
 </html>

@@ -1209,9 +1209,23 @@ async def decision_propose(body: ProposePayload) -> ProposeResponse:
     if arm_stats_summary:
         evidence["arm_stats"] = arm_stats_summary
     
-    # Add Phase-1 LLM analysis to evidence (for audit trail)
-    if llm_analysis_v2:
-        analysis_dict["llm_v2"] = llm_analysis_v2
+    # Compute alignment verdict (single source of truth) BEFORE creating analysis_dict
+    from services.analysis.enhanced_features import compute_alignment
+    pattern_state = (llm_analysis_v2.get("pattern") if llm_analysis_v2 else {}).get("state") if llm_analysis_v2 else None
+    if not pattern_state and pattern_info:
+        # Fallback: derive from pattern_info if LLM didn't provide state
+        primary_pattern = pattern_info.get("primary_pattern")
+        if primary_pattern:
+            pattern_type = primary_pattern.get("type", "NEUTRAL")
+            if pattern_type == "BULLISH":
+                pattern_state = "BREAKOUT"
+            elif pattern_type == "BEARISH":
+                pattern_state = "PULLBACK"
+            else:
+                pattern_state = "RANGE"
+    participation_quality_for_alignment = (llm_analysis_v2.get("participation") if llm_analysis_v2 else {}).get("quality") if llm_analysis_v2 else participation_quality
+    car_significant = event_study_summary.get("supports", False) if event_study_summary else False
+    alignment = compute_alignment(pattern_state, participation_quality_for_alignment, car_significant)
     
     why = WhySelected(
         ticker=body.ticker,
@@ -1226,6 +1240,13 @@ async def decision_propose(body: ProposePayload) -> ProposeResponse:
     analysis_dict = why.model_dump()
     if evidence:
         analysis_dict["evidence"] = evidence
+    
+    # Add Phase-1 LLM analysis to evidence (for audit trail) - AFTER analysis_dict is created
+    if llm_analysis_v2:
+        analysis_dict["llm_v2"] = llm_analysis_v2
+    
+    # Add alignment verdict - AFTER analysis_dict is created
+    analysis_dict["alignment"] = alignment
     
     # Add series arrays for Plotly panels (compute once server-side for performance)
     series_data = {}
@@ -1685,11 +1706,13 @@ def trade_execute(body: ExecutePayload):
 class AlertCreatePayload(StrictModel):
     ticker: str
     rule: dict
-    analysis: Optional[dict] = None
+    decision_id: Optional[str] = None
     plan: Optional[dict] = None
+    alignment: Optional[str] = None
     llm_v2: Optional[dict] = None
     drivers: Optional[dict] = None
     nba_score: Optional[float] = None
+    timestamp_ms: Optional[int] = None
 
 @app.post("/alerts/create")
 async def create_alert(body: AlertCreatePayload):
@@ -1711,11 +1734,13 @@ class BriefSendPayload(StrictModel):
     verdict: Optional[str] = None
     summary: str
     links: Optional[dict] = None
-    analysis: Optional[dict] = None
+    decision_id: Optional[str] = None
     plan: Optional[dict] = None
+    alignment: Optional[str] = None
     llm_v2: Optional[dict] = None
     drivers: Optional[dict] = None
     nba_score: Optional[float] = None
+    timestamp_ms: Optional[int] = None
 
 @app.post("/briefs/send")
 async def send_brief(body: BriefSendPayload):
@@ -1732,13 +1757,16 @@ async def send_brief(body: BriefSendPayload):
     }
 
 class DecisionCommitPayload(StrictModel):
-    analysis: dict
+    ticker: str
+    decision_id: Optional[str] = None
     plan: dict
     owner: str = "me"
     due: Optional[str] = None
+    alignment: Optional[str] = None
     llm_v2: Optional[dict] = None
     drivers: Optional[dict] = None
     nba_score: Optional[float] = None
+    timestamp_ms: Optional[int] = None
 
 @app.post("/decisions/commit")
 async def commit_decision(body: DecisionCommitPayload):
@@ -1746,15 +1774,14 @@ async def commit_decision(body: DecisionCommitPayload):
     Commit a decision plan with owner and due date.
     Stub endpoint - logs and returns success.
     """
-    ticker = body.analysis.get("ticker") or body.plan.get("ticker", "UNKNOWN")
-    logger.info(f"Decision committed: ticker={ticker}, owner={body.owner}, due={body.due}")
+    logger.info(f"Decision committed: ticker={body.ticker}, owner={body.owner}, due={body.due}, alignment={body.alignment}")
     # TODO: Store in database, create task in project management system
     return {
         "status": "committed",
-        "ticker": ticker,
+        "ticker": body.ticker,
         "owner": body.owner,
         "due": body.due,
-        "decision_id": f"decision_{ticker}_{datetime.utcnow().timestamp()}"
+        "decision_id": body.decision_id or f"decision_{body.ticker}_{datetime.utcnow().timestamp()}"
     }
 
 # ========================================

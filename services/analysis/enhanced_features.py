@@ -462,3 +462,30 @@ def arm_stats_with_ci(
         "max_dd": max_dd
     }
 
+
+def compute_alignment(
+    pattern_state: Optional[str],
+    participation_quality: Optional[str],
+    car_significant: Optional[bool]
+) -> str:
+    """
+    Compute alignment verdict based on pattern, participation, and CAR significance.
+    
+    Returns:
+        "ALIGNED" | "MIXED" | "MISALIGNED" | "UNKNOWN"
+    """
+    if not pattern_state:
+        return "UNKNOWN"
+    
+    patt = pattern_state.upper()
+    part = (participation_quality or "LOW").upper()
+    car = bool(car_significant)
+    
+    if patt in ("BREAKOUT", "PULLBACK") and part == "HIGH" and car:
+        return "ALIGNED"
+    
+    if patt in ("BREAKOUT", "PULLBACK") and part in ("MEDIUM", "HIGH") and (car or part == "MEDIUM"):
+        return "MIXED"
+    
+    return "MISALIGNED"
+
