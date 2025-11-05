@@ -15,7 +15,11 @@ from db.models import Base, BanditLog, RewardLog, Event
 from services.policy.validators import (
     MarketSnapshot, TradePlan, PolicyContext, validate
 )
-from services.llm.client import propose_trade
+from services.llm.client import propose_trade, propose_trade_v2
+from apps.api.schemas_llm import parse_llm_json, TradeAnalysisV2
+from services.llm.prompt_builder import build_messages
+from services.llm.validator import enforce_policy_and_sanity
+from pathlib import Path
 from libs.analytics.bandit import ContextualTS, Arm
 from libs.analytics.persistence import BanditStatePersistence
 from services.scanner.catalyst_scanner import CatalystScanner
@@ -853,6 +857,195 @@ async def decision_propose(body: ProposePayload) -> ProposeResponse:
         gating_facts=gating_facts(cat, mkt)
     )
     
+    # Compute evidence and pattern detection FIRST (needed for Phase-1 LLM)
+    from apps.api.evidence_analysis import compute_evidence_analysis, compute_technical_indicators
+    from services.analysis.pattern_detection import detect_patterns
+    
+    evidence = {}
+    pattern_info = None
+    hist = None
+    try:
+        hist = market_data.daily_ohlc(body.ticker, lookback=30)
+        if hist:
+            # Detect technical patterns
+            pattern_info = detect_patterns(hist, body.price)
+            
+            evidence = compute_evidence_analysis(
+                ticker=body.ticker,
+                hist=hist,
+                price=body.price,
+                volume_surge_ratio=body.volume_surge_ratio,
+                event_type=cat.event_type,
+                days_to_event=cat.days_to_event,
+                backtest_data=perf.model_dump() if hasattr(perf, 'model_dump') else {}
+            )
+            
+            # Add pattern info to evidence
+            if pattern_info:
+                evidence["patterns"] = pattern_info
+    except Exception as e:
+        logger.warning(f"[{body.decision_id}] Evidence analysis failed: {e}")
+    
+    # Get event-study CAR (for evidence)
+    event_study_summary = {}
+    event_study_car_sig = False
+    try:
+        from services.analysis.enhanced_features import compute_event_study
+        event_study = compute_event_study(
+            ticker=body.ticker,
+            event_type=cat.event_type,
+            hist=hist if hist else [],
+            market_data_adapter=market_data,
+            pre_days=5,
+            post_days=5
+        )
+        if "car" in event_study and len(event_study["car"]) > 0:
+            # Keep full CAR series for Plotly panel
+            event_study_summary = {
+                "car": event_study["car"],
+                "supports": any(c.get("mean", 0) > 0.005 for c in event_study["car"]),
+                "ticker": event_study.get("ticker", body.ticker),
+                "event": event_study.get("event", cat.event_type),
+                "window": event_study.get("window", {"pre": 5, "post": 5})
+            }
+            # Check if CAR is significant (any positive mean > 0.5%)
+            event_study_car_sig = any(c.get("mean", 0) > 0.005 for c in event_study["car"])
+    except Exception as e:
+        logger.debug(f"[{body.decision_id}] Event study computation failed: {e}")
+    
+    # Build deterministic facts for Phase-1 LLM
+    from services.analysis.enhanced_features import compute_participation_quality, compute_iv_rv_gap
+    from services.policy.validators import SPREAD_CENTS_MAX, SPREAD_BPS_MAX
+    
+    participation_quality, participation_score = compute_participation_quality(
+        volume_surge_ratio=body.volume_surge_ratio,
+        dollar_adv=body.liquidity,
+        spread=body.spread,
+        price=body.price
+    )
+    
+    # Compute IV-RV gap if available
+    try:
+        iv_rv_gap, iv_rv_regime = compute_iv_rv_gap(
+            iv=body.expected_move / 100.0 if body.expected_move else None,
+            realized_volatility=body.rolling_volatility_10d
+        )
+    except Exception:
+        iv_rv_gap = 0.0
+        iv_rv_regime = "UNKNOWN"
+    
+    # Compute sector relative strength
+    try:
+        from services.analysis.enhanced_features import compute_sector_relative_strength
+        sector_rel_strength = compute_sector_relative_strength(
+            ticker=body.ticker,
+            hist=hist if hist else [],
+            market_data_adapter=market_data
+        )
+    except Exception:
+        sector_rel_strength = 1.0
+    
+    # Pattern detected (or null)
+    pattern_detected_dict = None
+    if pattern_info and pattern_info.get("primary_pattern"):
+        primary = pattern_info["primary_pattern"]
+        pattern_detected_dict = {
+            "name": primary.get("name", ""),
+            "confidence": primary.get("confidence", 0.0),
+            "side": primary.get("type", "NEUTRAL").upper() if primary.get("type") in ("BULLISH", "BEARISH") else "NEUTRAL"
+        }
+    
+    # Build deterministic payload for Phase-1 LLM
+    payload_for_llm = {
+        "price": float(body.price),
+        "spread": float(body.spread),
+        "policy_limits": {
+            "spread_cents_max": SPREAD_CENTS_MAX,
+            "spread_bps_max": SPREAD_BPS_MAX
+        },
+        "recent_high_10d": float(body.recent_high),
+        "recent_low_10d": float(body.recent_low),
+        "price_position_10d": float(body.price_position),
+        "volume_surge_ratio": float(body.volume_surge_ratio),
+        "expected_move_iv": float(body.expected_move / 100.0) if body.expected_move else 0.0,
+        "rv_10d": float(body.rolling_volatility_10d),
+        "iv_minus_rv": float(iv_rv_gap),
+        "sector_relative_strength": float(sector_rel_strength),
+        "pattern_detected": pattern_detected_dict,
+        "participation_quality": participation_quality,
+        "evidence": {
+            "event_study": {
+                "significant": event_study_car_sig
+            }
+        },
+        "tick_size": 0.01  # Default tick size
+    }
+    
+    # Load SYSTEM prompt
+    try:
+        prompt_path = Path(project_dir) / "PROMPTS" / "LLM_SYSTEM.md"
+        if prompt_path.exists():
+            system_prompt_text = prompt_path.read_text(encoding="utf-8").split("# Exemplar")[0].strip()
+        else:
+            logger.warning(f"[{body.decision_id}] LLM_SYSTEM.md not found, using fallback")
+            system_prompt_text = "You are a professional trading analyst. Output STRICT JSON only."
+    except Exception as e:
+        logger.warning(f"[{body.decision_id}] Failed to load SYSTEM prompt: {e}")
+        system_prompt_text = "You are a professional trading analyst. Output STRICT JSON only."
+    
+    # Call Phase-1 LLM
+    llm_analysis_v2 = None
+    try:
+        messages = build_messages(system_prompt_text, payload_for_llm)
+        raw_response = await propose_trade_v2(messages)
+        
+        if raw_response:
+            ta = parse_llm_json(raw_response)
+            if ta:
+                # Enforce policy and sanity checks
+                ta = enforce_policy_and_sanity(ta, facts=payload_for_llm)
+                llm_analysis_v2 = ta.model_dump()
+                logger.info(f"[{body.decision_id}] Phase-1 LLM analysis parsed successfully")
+            else:
+                logger.warning(f"[{body.decision_id}] Phase-1 LLM parse failed, using fallback")
+        else:
+            logger.warning(f"[{body.decision_id}] Phase-1 LLM returned empty, using fallback")
+    except Exception as e:
+        logger.warning(f"[{body.decision_id}] Phase-1 LLM error: {e}, using fallback")
+    
+    # Fallback to conservative SKIP if Phase-1 LLM failed
+    if llm_analysis_v2 is None:
+        llm_analysis_v2 = TradeAnalysisV2.model_validate({
+            "schema": "TradeAnalysisV2",
+            "verdict_intraday": "SKIP",
+            "verdict_swing_1to5d": "SKIP",
+            "confidence": 0.5,
+            "room": {
+                "intraday_room_up_pct": 0.0,
+                "intraday_room_down_pct": 0.0,
+                "swing_room_up_pct": 0.0,
+                "swing_room_down_pct": 0.0,
+                "explain": "LLM parse fail"
+            },
+            "pattern": {"state": "RANGE"},
+            "participation": {"quality": "LOW"},
+            "catalyst_alignment": {"alignment": "NEUTRAL"},
+            "meme_social": {"diagnosis": "NOISE"},
+            "plan": {
+                "entry_type": "limit",
+                "entry_price": payload_for_llm.get("price", 0),
+                "stop_price": payload_for_llm.get("price", 0) * 0.99,
+                "targets": [],
+                "timeout_days": 1,
+                "rationale": "N/A"
+            },
+            "risk": {"policy_pass": False, "warnings": ["LLM parse failed"]},
+            "evidence": {},
+            "evidence_fields": [],
+            "missing_fields": ["llm_output"],
+            "assumptions": {"llm_fallback": True}
+        }).model_dump()
+    
     llm_payload = body.model_dump().copy()
     llm_payload["market_context"] = json.dumps({
         "ticker": body.ticker,
@@ -873,10 +1066,26 @@ async def decision_propose(body: ProposePayload) -> ProposeResponse:
     })
     llm_payload["social_sentiment"] = json.dumps(social_data)
     
-    llm_out = await propose_trade(llm_payload)
-    
-    # Get raw confidence from LLM
-    raw_confidence = float(llm_out.get("confidence", 0.5))
+    # Use Phase-1 LLM analysis if available, otherwise fall back to old LLM
+    if llm_analysis_v2 and llm_analysis_v2.get("schema") == "TradeAnalysisV2":
+        # Convert Phase-1 LLM output to legacy format for compatibility
+        plan = llm_analysis_v2.get("plan", {})
+        llm_out = {
+            "ticker": body.ticker,
+            "action": llm_analysis_v2.get("verdict_intraday", "SKIP"),
+            "entry_type": plan.get("entry_type", "limit"),
+            "entry_price": plan.get("entry_price", body.price),
+            "stop_price": plan.get("stop_price", body.price * 0.98),
+            "target_price": plan.get("targets", [body.price * 1.05])[0] if plan.get("targets") else body.price * 1.05,
+            "timeout_days": plan.get("timeout_days", 1),
+            "confidence": llm_analysis_v2.get("confidence", 0.5),
+            "reason": plan.get("rationale", "Phase-1 LLM analysis")
+        }
+        raw_confidence = float(llm_analysis_v2.get("confidence", 0.5))
+    else:
+        # Fallback to old LLM
+        llm_out = await propose_trade(llm_payload)
+        raw_confidence = float(llm_out.get("confidence", 0.5))
     
     # Apply calibration if available
     from services.analysis.calibration import get_calibration_service
@@ -897,70 +1106,7 @@ async def decision_propose(body: ProposePayload) -> ProposeResponse:
     llm_out["confidence"] = calibrated_confidence
     llm_out["raw_confidence"] = raw_confidence  # Keep original for reference
     
-    # Compute evidence-first statistical analysis
-    from apps.api.evidence_analysis import compute_evidence_analysis, compute_technical_indicators
-    from services.analysis.pattern_detection import detect_patterns
-    
-    evidence = {}
-    pattern_info = None
-    try:
-        hist = market_data.daily_ohlc(body.ticker, lookback=30)
-        if hist:
-            # Detect technical patterns
-            pattern_info = detect_patterns(hist, body.price)
-            
-            # Add pattern info to LLM payload
-            if pattern_info and pattern_info.get("primary_pattern"):
-                primary = pattern_info["primary_pattern"]
-                llm_payload["pattern_detected"] = json.dumps({
-                    "name": primary.get("name", ""),
-                    "type": primary.get("type", "NEUTRAL"),
-                    "confidence": primary.get("confidence", 0.0),
-                    "description": primary.get("description", ""),
-                    "target": primary.get("target", 0.0),
-                    "stop": primary.get("stop", 0.0),
-                    "implications": pattern_info.get("trading_implications", [])
-                })
-            
-            evidence = compute_evidence_analysis(
-                ticker=body.ticker,
-                hist=hist,
-                price=body.price,
-                volume_surge_ratio=body.volume_surge_ratio,
-                event_type=cat.event_type,
-                days_to_event=cat.days_to_event,
-                backtest_data=perf.model_dump() if hasattr(perf, 'model_dump') else {}
-            )
-            
-            # Add pattern info to evidence
-            if pattern_info:
-                evidence["patterns"] = pattern_info
-    except Exception as e:
-        logger.warning(f"[{body.decision_id}] Evidence analysis failed: {e}")
-    
-    # Get event-study CAR
-    event_study_summary = {}
-    try:
-        from services.analysis.enhanced_features import compute_event_study
-        event_study = compute_event_study(
-            ticker=body.ticker,
-            event_type=cat.event_type,
-            hist=hist if hist else [],
-            market_data_adapter=market_data,
-            pre_days=5,
-            post_days=5
-        )
-        if "car" in event_study and len(event_study["car"]) > 0:
-            # Keep full CAR series for Plotly panel
-            event_study_summary = {
-                "car": event_study["car"],  # Full series for plotting
-                "supports": any(c.get("mean", 0) > 0.005 for c in event_study["car"]),  # Any CAR > 0.5% suggests positive
-                "ticker": event_study.get("ticker", body.ticker),
-                "event": event_study.get("event", cat.event_type),
-                "window": event_study.get("window", {"pre": 5, "post": 5})
-            }
-    except Exception as e:
-        logger.debug(f"[{body.decision_id}] Event study computation failed: {e}")
+    # Event study summary already computed above
     
     # Get arm statistics with CI
     arm_stats_summary = {}
@@ -1011,6 +1157,10 @@ async def decision_propose(body: ProposePayload) -> ProposeResponse:
         evidence["event_study"] = event_study_summary
     if arm_stats_summary:
         evidence["arm_stats"] = arm_stats_summary
+    
+    # Add Phase-1 LLM analysis to evidence (for audit trail)
+    if llm_analysis_v2:
+        analysis_dict["llm_v2"] = llm_analysis_v2
     
     why = WhySelected(
         ticker=body.ticker,

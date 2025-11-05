@@ -1,0 +1,24 @@
+{
+  "price": 100.0,
+  "spread": 0.002,
+  "policy_limits": {
+    "spread_cents_max": 0.05,
+    "spread_bps_max": 0.005
+  },
+  "recent_high_10d": 99.5,
+  "volume_surge_ratio": 1.7,
+  "pattern_detected": {
+    "name": "Ascending Triangle",
+    "confidence": 0.71,
+    "side": "BULLISH"
+  },
+  "evidence": {
+    "event_study": {
+      "significant": true,
+      "car_t1": {
+        "mean": 0.012
+      }
+    }
+  }
+}
+

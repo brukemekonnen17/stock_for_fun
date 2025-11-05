@@ -39,6 +39,69 @@ def _mock_plan(ticker: str, price: float, reason: str = "LLM unavailable - gener
         "reason": reason
     }
 
+async def propose_trade_v2(messages: list[dict]) -> str:
+    """
+    Ask Anthropic Claude for a trade analysis (Phase-1 LLM layer).
+    Returns raw JSON string for strict parsing.
+    """
+    if not API_KEY:
+        logger.error("ANTHROPIC_API_KEY not found in environment.")
+        return ""
+
+    headers = {
+        "x-api-key": API_KEY,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json"
+    }
+    body = {
+        "model": MODEL_NAME,
+        "messages": messages,
+        "max_tokens": 1000,
+        "temperature": 0.0  # Deterministic
+    }
+
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            timeout = httpx.Timeout(12.0, connect=5.0)
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                r = await client.post(API_URL, headers=headers, json=body)
+                r.raise_for_status()
+                
+                response_data = r.json()
+                text = response_data.get("content", [{}])[0].get("text", "")
+                
+                if not text:
+                    raise ValueError("LLM response was empty.")
+                
+                logger.info(f"Claude Phase-1 response received ({len(text)} chars)")
+                return text
+                
+        except httpx.TimeoutException:
+            logger.warning(f"Claude timeout on attempt {attempt + 1}/{MAX_RETRIES + 1}")
+            if attempt < MAX_RETRIES:
+                await asyncio.sleep(0.5 * (2 ** attempt))
+                
+        except httpx.HTTPStatusError as e:
+            error_details = e.response.text
+            logger.error(f"Claude HTTP error {e.response.status_code}: {error_details}")
+            if 400 <= e.response.status_code < 500:
+                return ""
+            if attempt < MAX_RETRIES:
+                await asyncio.sleep(0.5 * (2 ** attempt))
+            else:
+                return ""
+                
+        except Exception as e:
+            logger.error(f"Unexpected LLM error: {e}", exc_info=True)
+            if attempt < MAX_RETRIES:
+                await asyncio.sleep(0.5 * (2 ** attempt))
+            else:
+                return ""
+    
+    logger.warning(f"LLM failed after {MAX_RETRIES + 1} attempts")
+    return ""
+
+
 async def propose_trade(payload: dict) -> dict:
     """
     Ask Anthropic Claude for a trade plan.

@@ -1,0 +1,21 @@
+{
+  "price": 50.0,
+  "spread": 0.001,
+  "policy_limits": {
+    "spread_cents_max": 0.05,
+    "spread_bps_max": 0.005
+  },
+  "recent_high_10d": 49.9,
+  "volume_surge_ratio": 1.1,
+  "pattern_detected": {
+    "name": "Flag",
+    "confidence": 0.58,
+    "side": "BULLISH"
+  },
+  "evidence": {
+    "event_study": {
+      "significant": false
+    }
+  }
+}
+

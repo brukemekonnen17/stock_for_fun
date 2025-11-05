@@ -152,7 +152,52 @@
       "timestamp": "2025-11-04T22:15:38.660569",
       "arm_name": "EARNINGS_PRE",
       "reward": null
+    },
+    {
+      "decision_id": "analyze-HTZ-1762312940",
+      "ticker": "HTZ",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-04T22:22:49.886465",
+      "arm_name": "EARNINGS_PRE",
+      "reward": null
+    },
+    {
+      "decision_id": "analyze-IBM-1762313070",
+      "ticker": "IBM",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-04T22:24:56.667031",
+      "arm_name": "REACTIVE",
+      "reward": null
+    },
+    {
+      "decision_id": "analyze-IBM-1762369895",
+      "ticker": "IBM",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T14:12:04.073344",
+      "arm_name": "NEWS_SPIKE",
+      "reward": null
+    },
+    {
+      "decision_id": "analyze-IBM-1762370926",
+      "ticker": "IBM",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T14:29:14.214379",
+      "arm_name": "EARNINGS_PRE",
+      "reward": null
+    },
+    {
+      "decision_id": "analyze-NVDA-1762370900",
+      "ticker": "NVDA",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T14:29:16.908331",
+      "arm_name": "SKIP",
+      "reward": null
     }
   ],
-  "last_updated": "2025-11-04T22:15:38.660660"
+  "last_updated": "2025-11-05T14:29:16.908368"
 }

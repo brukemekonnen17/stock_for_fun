@@ -1,0 +1,57 @@
+{
+  "schema": "TradeAnalysisV2",
+  "verdict_intraday": "BUY",
+  "verdict_swing_1to5d": "BUY",
+  "confidence": 0.74,
+  "room": {
+    "intraday_room_up_pct": 0.012,
+    "intraday_room_down_pct": 0.006,
+    "swing_room_up_pct": 0.04,
+    "swing_room_down_pct": 0.02,
+    "explain": "IV EM & distance to resistance"
+  },
+  "pattern": {
+    "state": "BREAKOUT",
+    "key_levels": {
+      "support_1": 99.5,
+      "resistance_1": 101.0
+    }
+  },
+  "participation": {
+    "quality": "HIGH",
+    "volume_surge_ratio": 1.7
+  },
+  "catalyst_alignment": {
+    "alignment": "SUPPORTS"
+  },
+  "meme_social": {
+    "diagnosis": "CONFIRMING"
+  },
+  "plan": {
+    "entry_type": "trigger",
+    "entry_price": 100.2,
+    "stop_price": 99.6,
+    "targets": [101.2, 101.8],
+    "timeout_days": 1,
+    "rationale": "Breakout + participation"
+  },
+  "risk": {
+    "policy_pass": true,
+    "reasons": ["Spread within policy"]
+  },
+  "evidence": {
+    "summary": "CAR sig T+1"
+  },
+  "evidence_fields": [
+    "spread",
+    "policy_limits",
+    "recent_high_10d",
+    "volume_surge_ratio",
+    "evidence.event_study.significant"
+  ],
+  "missing_fields": [],
+  "assumptions": {
+    "formulas": "room per spec"
+  }
+}
+

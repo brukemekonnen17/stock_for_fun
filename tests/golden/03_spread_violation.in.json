@@ -1,0 +1,9 @@
+{
+  "price": 20.0,
+  "spread": 0.12,
+  "policy_limits": {
+    "spread_cents_max": 0.05,
+    "spread_bps_max": 0.005
+  }
+}
+
