@@ -102,8 +102,9 @@ Use **only** fields present in `analysis_contract`. **Never invent.**
 
 **Economics (Net Returns After Costs):**
 - net_median > 0: "Profitable after costs" → **Expected returns exceed trading costs**
-- net_median ≤ 0: "Not profitable after costs" → **Trading costs eat up or exceed returns**
+- net_median ≤ 0: "Marginal after costs" → **Trading costs reduce profitability; consider tighter stops, better entry timing, or smaller position size** (NOT a veto if stats are strong)
 - net_median = null: "Cannot calculate" → **Insufficient data** to assess profitability
+- **Important**: Costs are **considerations for position sizing and risk management**, not automatic vetoes. Strong statistical evidence can override marginal cost concerns.
 
 ### Policy (must apply, in order)
 
@@ -120,8 +121,7 @@ Use **only** fields present in `analysis_contract`. **Never invent.**
 
 1. **Eligibility gates**
    * If `ticker` ≠ requested ticker → `verdict="SKIP"`, `reason_code="TICKER_MISMATCH"`.
-   * If `economics.blocked == true` → `verdict="SKIP"`, `reason_code="ECON_VETO"`.
-   * If `economics.net_median` is null or ≤ 0 → `verdict="SKIP"`, `reason_code="ECON_BLOCK"`.
+   * **Costs are warnings, not blockers**: If `economics.net_median` ≤ 0 or `economics.blocked == true`, mention as a consideration but do NOT automatically SKIP if statistical evidence is strong. Costs should inform position sizing and entry strategy, not veto the trade entirely.
 
 2. **Statistical gate**
    * Compute set S = horizons in `evidence[]` with **q < 0.10** **and** `effect` (in bps) **≥ 30**.
