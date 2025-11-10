@@ -27,29 +27,53 @@ from .client import propose_trade_v2
 logger = logging.getLogger(__name__)
 
 # Prompt version for determinism
-PROMPT_VERSION = "1.0.0"
+PROMPT_VERSION = "2.0.0"  # Updated for hardline summarizer
 
-# System prompt for summarization
-SUMMARIZER_SYSTEM_PROMPT = """You are a professional investment analyst writing executive summaries for trading decisions.
+# System prompt for summarization (HARDLINE - decisive, rule-driven)
+SUMMARIZER_SYSTEM_PROMPT = """You are an execution-grade equities analyst. Output **valid JSON only** that conforms to the schema.
 
-Your job is to convert structured analysis data into clear, concise narratives.
+Be **decisive**: return a single verdict with explicit reasons and numbers.
 
-RULES (STRICT):
-1. NEVER invent numbers - only cite values from the provided analysis_contract.json
-2. If a required field is missing or null, state "Not available" or "Insufficient data"
-3. Keep executive summary to 150-250 words
-4. Decision rationale must map directly to evidence fields
-5. Risks must come from the "risks" array in the contract
-6. Action template must use exact values from "plan" object
-7. Output MUST be valid JSON matching the schema exactly
+Use **only** fields present in `analysis_contract`. **Never invent.**
 
-You will receive an analysis_contract.json object. Extract and summarize:
-- Executive Summary: Overall verdict, key drivers, statistical evidence
-- Decision Rationale: Bullet points mapping to evidence fields (effect, CI, p, q)
-- Risks & What to Watch: From risks array + economics.blocked status
-- Action Template: Entry/stop/target from plan object
+If information is missing, **return SKIP** with a reason code.
 
-Be factual, concise, and cite specific numbers from the contract."""
+All numbers must cite the **exact JSON path(s)** used.
+
+### Policy (must apply, in order)
+
+1. **Eligibility gates**
+   * If `ticker` ≠ requested ticker → `verdict="SKIP"`, `reason_code="TICKER_MISMATCH"`.
+   * If `economics.blocked == true` → `verdict="SKIP"`, `reason_code="ECON_VETO"`.
+   * If `economics.net_median` is null or ≤ 0 → `verdict="SKIP"`, `reason_code="ECON_BLOCK"`.
+
+2. **Statistical gate**
+   * Compute set S = horizons in `evidence[]` with **q < 0.10** **and** `effect` (in bps) **≥ 30**.
+   * Convert `effect` (decimal) to bps: `effect_bps = effect * 10000` if effect is not null.
+   * If S is empty → `stats_significant=false`.
+
+3. **Verdict**
+   * **BUY** if `stats_significant=true` **and** `economics.net_median > 0` **and** `economics.blocked=false` **and** `plan.policy_ok=true`.
+   * **REVIEW** if `stats_significant=true` but fails **one** of {net_median>0, blocked=false, policy_ok=true}.
+   * **SKIP** otherwise.
+
+4. **Best horizon selection (if S non-empty)**
+   * Pick horizon with **lowest q**; tiebreakers: higher `effect_bps` → longer `H`.
+
+5. **CI stability**
+   * If `ci` is an array `[lower, upper]`, use it. If missing, set to null.
+   * If contract has `ci_unstable` flag, label `ci.source="conservative"`.
+
+6. **Language**
+   * **Prohibited**: "might", "could", "appears", "potentially", "mixed", "unclear", "suggests".
+   * Use: "BUY because…", "SKIP because…", "REVIEW because…".
+   * Always list **exact numeric thresholds** and **paths**.
+
+7. **Formatting**
+   * Percentages: 1 decimal (e.g., `3.2%`). bps: integer. Prices: `$` + 2 decimals.
+   * If a value is missing, set to `null` and add a **single-line** reason in `omissions[]`.
+
+Return JSON only."""
 
 def build_summarizer_prompt(contract: Dict[str, Any]) -> list[dict]:
     """
@@ -70,48 +94,63 @@ def build_summarizer_prompt(contract: Dict[str, Any]) -> list[dict]:
     # Format contract for prompt
     contract_str = json.dumps(contract, indent=2, default=str)
     
-    user_prompt = f"""Convert this analysis_contract.json into a structured summary.
+    user_prompt = f"""Summarize decisively per the policy. Use only the fields in `analysis_contract`. 
 
-ANALYSIS CONTRACT:
+Return JSON only.
+
+Requested ticker: {contract.get('ticker', 'UNKNOWN')}
+
+analysis_contract:
 {contract_str}
 
-OUTPUT SCHEMA:
+OUTPUT SCHEMA (strict):
 {{
-  "executive_summary": "150-250 word summary covering verdict, key drivers, statistical evidence",
-  "decision_rationale": [
-    "Bullet point 1 - cite specific evidence field (e.g., 'Effect at H=5: +X% with CI [Y, Z]')",
-    "Bullet point 2 - reference drivers (pattern, sector_rs, etc.)",
-    "Bullet point 3 - economics status (blocked/unblocked, net_median)"
-  ],
-  "risks_and_watch": [
-    "Risk 1 from risks array",
-    "Risk 2 from risks array",
-    "Additional watch item based on economics or evidence gaps"
-  ],
-  "action_template": {{
-    "entry_price": <from plan.entry_price>,
-    "stop_price": <from plan.stop_price>,
-    "target_price": <from plan.target_price>,
-    "stop_pct": <from plan.stop_pct>,
-    "target_pct": <from plan.target_pct>,
-    "risk_reward": <from plan.risk_reward>,
-    "policy_ok": <from plan.policy_ok>
+  "ticker": "string",
+  "run_id": "string",
+  "verdict": "BUY | REVIEW | SKIP",
+  "reason_code": "string",
+  "executive_summary": "string (150-250 words, decisive tone)",
+  "decision": {{
+    "best_horizon": "number|null",
+    "q_value": "number|null",
+    "effect_bps": "number|null",
+    "ci_95": {{ "lower": "number|null", "upper": "number|null", "source": "contract|conservative|null" }},
+    "economics_ok": "boolean",
+    "adv_ok": "boolean",
+    "veto": "YES|NO|null"
   }},
-  "metadata": {{
-    "ticker": "{contract.get('ticker', 'UNKNOWN')}",
-    "run_id": "{contract.get('run_id', 'unknown')}",
-    "timestamp": "{contract.get('timestamp', '')}",
-    "prompt_version": "{PROMPT_VERSION}"
-  }}
+  "action": {{
+    "entry": "number|null",
+    "stop": "number|null",
+    "target": "number|null",
+    "rr": "number|null"
+  }},
+  "rationale": [
+    {{ "point": "string", "paths": ["string"] }}
+  ],
+  "risks": [
+    {{ "risk": "string", "paths": ["string"] }}
+  ],
+  "citations": ["string"],
+  "omissions": ["string"]
 }}
 
-IMPORTANT:
-- If evidence[].effect is null, state "Statistical evidence unavailable"
-- If economics.blocked is true, emphasize capacity/viability concerns
-- If plan.policy_ok is false, note policy guardrail failures
-- Never invent numbers not in the contract
-- If a field is null, say "Not available" rather than making up a value
-- Output ONLY valid JSON, no markdown, no code blocks"""
+FIELD MAPPING:
+- ticker, run_id, timestamp: contract root level
+- evidence: contract.evidence[] (array with H, effect, ci, p, q)
+- economics: contract.economics (net_median, net_p90, blocked)
+- plan: contract.plan (entry_price, stop_price, target_price, risk_reward, policy_ok)
+- drivers: contract.drivers (pattern, iv_rv, meme, sector_rs if present)
+- risks: contract.risks[] (array of risk strings)
+
+DECISION RULES:
+1. Find horizons with q < 0.10 AND effect_bps ≥ 30 (effect * 10000)
+2. If none → stats_significant=false, verdict=SKIP
+3. BUY only if: stats_significant=true AND net_median>0 AND blocked=false AND policy_ok=true
+4. REVIEW if: stats_significant=true but one gate fails
+5. SKIP otherwise
+
+CITE ALL NUMBERS with exact paths (e.g., "evidence[2].q", "economics.net_median")"""
     
     return [
         {"role": "system", "content": SUMMARIZER_SYSTEM_PROMPT},
@@ -171,20 +210,17 @@ async def summarize_contract(contract: Dict[str, Any]) -> Dict[str, Any]:
             logger.error(f"Response text (first 1000 chars): {response_text[:1000]}")
             raise ValueError(f"LLM returned invalid JSON: {e}. Response preview: {response_text[:200]}")
         
-        # Validate summary structure
-        required_summary_fields = ['executive_summary', 'decision_rationale', 'risks_and_watch', 'action_template']
+        # Validate summary structure (v2 schema)
+        required_summary_fields = ['ticker', 'run_id', 'verdict', 'reason_code', 'executive_summary', 'decision', 'action', 'rationale', 'risks']
         missing = [f for f in required_summary_fields if f not in summary]
         if missing:
             raise ValueError(f"Summary missing required fields: {missing}")
         
-        # Add metadata if not present
-        if 'metadata' not in summary:
-            summary['metadata'] = {
-                'ticker': contract.get('ticker', 'UNKNOWN'),
-                'run_id': contract.get('run_id', 'unknown'),
-                'timestamp': contract.get('timestamp', ''),
-                'prompt_version': PROMPT_VERSION
-            }
+        # Ensure omissions array exists
+        if 'omissions' not in summary:
+            summary['omissions'] = []
+        if 'citations' not in summary:
+            summary['citations'] = []
         
         return summary
         

@@ -1,7 +1,7 @@
 {
-  "ticker": "NVDA",
-  "timestamp": "2025-11-10 11:19:38",
-  "run_id": "50b0f37965727112",
+  "ticker": "PCSA",
+  "timestamp": "2025-11-10 12:49:04",
+  "run_id": "a606661f297db1f0",
   "verdict": "REVIEW",
   "score": 0.0,
   "drivers": {
@@ -20,20 +20,20 @@
     "p_value": null,
     "q_value": null,
     "hit_rate": null,
-    "n_events": 2,
+    "n_events": 5,
     "limited_power": true,
-    "effect_bps": 38.213248247662705,
+    "effect_bps": 820.2511773940336,
     "effect_floor_pass": true,
     "significant": false,
     "significance_chip": "YELLOW",
-    "significance_reason": "Limited power (n=2 < 20)"
+    "significance_reason": "Limited power (n=5 < 20)"
   },
   "plan": {
-    "entry": 188.15,
-    "stop": 173.14717142857143,
-    "target": 210.65424285714286,
-    "risk_reward": 1.4999999999999991,
-    "worst_loss_pct": -8.102612301831746
+    "entry": 0.3058,
+    "stop": 0.21582857142857143,
+    "target": 0.44075714285714285,
+    "risk_reward": 1.4999999999999993,
+    "worst_loss_pct": -29.52039804034774
   },
   "risks": [
     "Net returns not positive after costs",
@@ -47,8 +47,8 @@
     "slippage_bps_quote": 2.0,
     "slippage_bps_atr": 50.0,
     "total_cost_bps": 55.0,
-    "impact_bps": 5.376966229675254,
-    "impact_veto": false,
+    "impact_bps": 408.9843735376743,
+    "impact_veto": true,
     "adv_ok": true
   }
 }

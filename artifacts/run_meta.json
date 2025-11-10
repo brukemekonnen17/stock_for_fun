@@ -1,9 +1,9 @@
 {
-  "ticker": "NVDA",
+  "ticker": "PCSA",
   "window_days": 365,
   "data_source": "cache",
   "seed": 42,
-  "run_id": "50b0f37965727112",
-  "run_timestamp_utc": "2025-11-10T16:19:38.214006",
+  "run_id": "a606661f297db1f0",
+  "run_timestamp_utc": "2025-11-10T17:49:04.432791",
   "m1_checks_passed": true
 }

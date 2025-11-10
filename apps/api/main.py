@@ -29,6 +29,7 @@ from services.broker.etrade_oauth import request_token as et_request_token, exch
 from apps.api.schemas import WhySelected, CatalystInfo, StrategyRationale, MarketContext, PerfStats, NewsItem
 from apps.api.schemas_base import StrictModel
 from apps.api.schemas_summarizer import SummarizeRequest, SummaryResponse
+from apps.api.schemas_summarizer_v2 import SummaryResponseV2
 from services.llm.summarizer import summarize_contract, load_contract_from_file
 from services.analysis.explain import (
     catalyst_from_payload,
@@ -325,17 +326,33 @@ async def summarize(request: SummarizeRequest):
         # Generate summary
         summary = await summarize_contract(contract)
         
-        # Validate response schema
+        # Validate response schema (try v2 first, fallback to v1)
         try:
-            validated = SummaryResponse(**summary)
+            validated = SummaryResponseV2(**summary)
             return validated
         except Exception as e:
-            logger.error(f"Summary validation failed: {e}")
-            logger.error(f"Summary: {summary}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Summary validation failed: {str(e)}"
-            )
+            # Fallback to v1 schema for backward compatibility
+            try:
+                # Convert v2 to v1 format if needed
+                if 'decision' in summary and 'action' in summary:
+                    # Already v2 format, validation failed
+                    logger.error(f"Summary validation failed: {e}")
+                    logger.error(f"Summary: {summary}")
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Summary validation failed: {str(e)}"
+                    )
+                else:
+                    # Try v1 schema
+                    validated = SummaryResponse(**summary)
+                    return validated
+            except Exception as e2:
+                logger.error(f"Summary validation failed (both v1 and v2): {e2}")
+                logger.error(f"Summary: {summary}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Summary validation failed: {str(e2)}"
+                )
             
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
