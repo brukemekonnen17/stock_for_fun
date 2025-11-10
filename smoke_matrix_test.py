@@ -130,7 +130,10 @@ def main():
     print("⚠️  Manual verification required for full smoke test")
     print("="*70)
     
-    return 0
+    # Exit with non-zero if any test failed (for CI)
+    failed_count = sum(1 for _, (status, _) in results if not status)
+    exit_code = 0 if failed_count == 0 else 1
+    sys.exit(exit_code)
 
 
 if __name__ == "__main__":

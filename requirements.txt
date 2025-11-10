@@ -29,3 +29,6 @@ pandas-market-calendars==4.3.4
 # Optional: Scientific Computing
 scipy==1.13.1
 
+# Optional: JSON Schema Validation
+jsonschema==4.21.1
+
