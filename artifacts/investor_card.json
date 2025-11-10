@@ -1,6 +1,6 @@
 {
   "ticker": "NVDA",
-  "timestamp": "2025-11-10 11:08:18",
+  "timestamp": "2025-11-10 11:19:38",
   "run_id": "50b0f37965727112",
   "verdict": "REVIEW",
   "score": 0.0,
@@ -49,6 +49,6 @@
     "total_cost_bps": 55.0,
     "impact_bps": 5.376966229675254,
     "impact_veto": false,
-    "adv_ok": "True"
+    "adv_ok": true
   }
 }
