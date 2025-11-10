@@ -44,12 +44,12 @@ class SummaryResponseV2(BaseModel):
     run_id: str = Field(..., description="Deterministic run ID")
     verdict: Literal["BUY", "REVIEW", "SKIP"] = Field(..., description="Final verdict")
     reason_code: str = Field(..., description="Reason code (e.g., STATS_WEAK, ECON_VETO)")
-            executive_summary: str = Field(
-                ...,
-                min_length=150,  # Minimum 150 words for SKIP (≈750 chars), 200+ for BUY/REVIEW
-                max_length=3000,  # Allow longer executive summaries (200-300 words ≈ 1000-1500 chars)
-                description="200+ word executive summary for BUY/REVIEW, 150+ for SKIP. Must explain pattern, statistical reliability, economics, decision rationale, and action guidance in plain language."
-            )
+    executive_summary: str = Field(
+        ...,
+        min_length=150,  # Minimum 150 words for SKIP (≈750 chars), 200+ for BUY/REVIEW
+        max_length=3000,  # Allow longer executive summaries (200-300 words ≈ 1000-1500 chars)
+        description="200+ word executive summary for BUY/REVIEW, 150+ for SKIP. Must explain pattern, statistical reliability, economics, decision rationale, and action guidance in plain language."
+    )
     decision: DecisionData = Field(..., description="Decision evidence and gates")
     action: ActionData = Field(..., description="Action template")
     rationale: List[RationalePoint] = Field(..., min_items=1, description="Decision rationale with citations")
