@@ -240,14 +240,22 @@ class ExecutePayload(StrictModel):
 # Dashboard
 @app.get("/", response_class=FileResponse)
 def root():
-    return FileResponse("/Users/brukemekonnen/stock_investment/trading_dashboard.html")
+    """Serve notebook summary page (clean, fresh start)"""
+    return FileResponse("/Users/brukemekonnen/stock_investment/notebook_summary.html")
+
+@app.get("/summary", response_class=FileResponse)
+def summary_page():
+    """Notebook summary page - clean interface"""
+    return FileResponse("/Users/brukemekonnen/stock_investment/notebook_summary.html")
 
 @app.get("/dashboard", response_class=FileResponse)
 def dashboard():
+    """Legacy dashboard (kept for backward compatibility)"""
     return FileResponse("/Users/brukemekonnen/stock_investment/trading_dashboard.html")
 
 @app.get("/executive-report", response_class=FileResponse)
 def serve_executive_report():
+    """Legacy executive report"""
     return FileResponse("/Users/brukemekonnen/stock_investment/executive_report.html")
 
 # Health
