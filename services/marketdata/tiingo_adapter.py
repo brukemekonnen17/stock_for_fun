@@ -11,8 +11,8 @@ API Key: https://www.tiingo.com/account/api/token
 import requests
 import os
 import logging
-from typing import Optional, Dict, Any
-from datetime import datetime
+from typing import Optional, Dict, Any, List
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -91,12 +91,12 @@ class TiingoAdapter:
     
     def get_historical_bars(self, ticker: str, interval: str = "1day", period: str = "1mo") -> Optional[list]:
         """
-        Get historical bars from Tiingo.
-        MVP: Return None for now, forcing fallback to yfinance for historical data.
+        Get historical bars - compatibility method that delegates to daily_ohlc.
         """
-        # TODO: Implement Tiingo historical data endpoint
-        # For MVP, we'll rely on yfinance for historical data
-        return None
+        # Map period to lookback days
+        period_map = {"1d": 1, "5d": 5, "1mo": 30, "3mo": 90, "1y": 365}
+        lookback = period_map.get(period, 60)
+        return self.daily_ohlc(ticker, lookback=lookback)
     
     # Compatibility methods to match existing MarketData protocol
     def last_quote(self, ticker: str) -> dict:
@@ -106,10 +106,94 @@ class TiingoAdapter:
             raise ValueError(f"Could not fetch quote for {ticker} from Tiingo")
         return quote
     
-    def daily_ohlc(self, ticker: str, lookback: int = 60) -> list:
-        """Compatibility method - returns empty for MVP"""
-        # MVP: Historical data falls back to yfinance
-        return []
+    def daily_ohlc(self, ticker: str, lookback: int = 60) -> List[dict]:
+        """
+        Get daily OHLC data from Tiingo EOD API with split-adjusted prices.
+        
+        Args:
+            ticker: Stock symbol
+            lookback: Number of calendar days to look back (Tiingo will return trading days)
+        
+        Returns:
+            List of dicts with date, open, high, low, close, adj_close, volume
+        """
+        if not self.api_key:
+            logger.debug("Tiingo API key not configured, skipping")
+            return []
+        
+        ticker = ticker.upper().strip()
+        
+        # Calculate date range (lookback days from today)
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=lookback)
+        
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Token {self.api_key}'
+        }
+        
+        # Tiingo EOD API endpoint
+        url = f"{self.BASE_URL}/daily/{ticker}/prices"
+        params = {
+            'startDate': start_date.strftime('%Y-%m-%d'),
+            'endDate': end_date.strftime('%Y-%m-%d')
+        }
+        
+        try:
+            logger.debug(f"Fetching Tiingo EOD data for {ticker} from {start_date.date()} to {end_date.date()}")
+            response = requests.get(url, headers=headers, params=params, timeout=15)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            if not data or not isinstance(data, list):
+                logger.warning(f"No historical data from Tiingo for {ticker}")
+                return []
+            
+            # Transform Tiingo format to our standard format
+            out = []
+            for bar in data:
+                # Extract date (Tiingo returns ISO format like "2024-11-10T00:00:00.000Z")
+                date_str = bar.get('date', '')
+                if date_str:
+                    # Convert to simple date format (YYYY-MM-DD)
+                    date_obj = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+                    date_simple = date_obj.strftime('%Y-%m-%d')
+                else:
+                    logger.warning(f"Missing date in Tiingo response for {ticker}")
+                    continue
+                
+                # Tiingo provides split-adjusted data in adjClose, adjOpen, adjHigh, adjLow
+                # We use adjClose for consistency with other providers
+                out.append({
+                    'date': date_simple,
+                    'open': float(bar.get('open', 0)),
+                    'high': float(bar.get('high', 0)),
+                    'low': float(bar.get('low', 0)),
+                    'close': float(bar.get('close', 0)),
+                    'adj_close': float(bar.get('adjClose', bar.get('close', 0))),  # Split-adjusted
+                    'volume': int(bar.get('volume', 0))
+                })
+            
+            logger.info(f"✅ Tiingo returned {len(out)} bars for {ticker}")
+            return out
+            
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                logger.warning(f"Ticker {ticker} not found in Tiingo EOD data")
+                return []
+            elif e.response.status_code == 429:
+                logger.warning(f"Tiingo rate limit exceeded for {ticker}")
+                raise ValueError(f"RATE_LIMIT_429: Tiingo rate limit exceeded (50/day on free tier)")
+            else:
+                logger.error(f"Tiingo HTTP error for {ticker}: {e}")
+                return []
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Tiingo API request error for {ticker}: {e}")
+            return []
+        except Exception as e:
+            logger.error(f"Unexpected error fetching Tiingo data for {ticker}: {e}")
+            return []
     
     def spread_proxy(self, ticker: str) -> float:
         """Calculate spread proxy from bid/ask"""

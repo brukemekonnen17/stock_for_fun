@@ -130,19 +130,26 @@ class MarketDataProviderService:
         return quote
     
     def daily_ohlc(self, ticker: str, lookback: int = 60) -> List[dict]:
-        """Get daily OHLC - delegates to yfinance (fallback) for historical data"""
-        # For MVP, use yfinance for historical data (Tiingo historical not implemented yet)
-        for provider in self.providers:
+        """Get daily OHLC - tries providers in fallback order"""
+        logger.info(f"Fetching historical data for {ticker} (lookback={lookback}d)")
+        logger.info(f"Provider chain: {[p.__class__.__name__ for p in self.providers]}")
+        
+        for i, provider in enumerate(self.providers, 1):
+            provider_name = provider.__class__.__name__
             if hasattr(provider, 'daily_ohlc'):
                 try:
+                    logger.info(f"Trying provider {i}/{len(self.providers)}: {provider_name}")
                     result = provider.daily_ohlc(ticker, lookback)
                     if result:
+                        logger.info(f"✅ Historical data fetched from {provider_name} ({len(result)} bars)")
                         return result
+                    else:
+                        logger.warning(f"⚠️ {provider_name} returned empty result, trying next provider")
                 except Exception as e:
-                    logger.debug(f"{provider.__class__.__name__} daily_ohlc failed: {e}")
+                    logger.warning(f"❌ {provider_name} failed: {str(e)[:100]}, trying next provider")
                     continue
         
-        logger.warning(f"No historical data available for {ticker}")
+        logger.error(f"CRITICAL: All providers failed for {ticker} historical data")
         return []
     
     def spread_proxy(self, ticker: str) -> float:
