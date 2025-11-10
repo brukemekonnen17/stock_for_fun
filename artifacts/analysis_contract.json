@@ -1,8 +1,8 @@
 {
-  "analysis_id": "c470e1d7-2518-4341-a995-0d4ca02e218e",
+  "analysis_id": "58ae1f97-3b75-4f40-bb82-ab15b42038e9",
   "ticker": "NVDA",
   "window_days": 365,
-  "timestamp": "2025-11-10T09:42:15.385413",
+  "timestamp": "2025-11-10T10:12:06.676343",
   "drivers": {
     "pattern": "GREEN",
     "sector_rs": "+",
