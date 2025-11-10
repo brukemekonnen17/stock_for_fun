@@ -161,29 +161,29 @@ def build_summarizer_prompt(contract: Dict[str, Any]) -> list[dict]:
 
 **STATISTICAL INTERPRETATION REQUIRED**:
 For each evidence entry in `evidence[]`, explain:
-1. **What we tested**: "At H={H} days, we tested if the EMA crossover pattern predicts returns"
+1. **What we tested**: "At H=[horizon] days, we tested if the EMA crossover pattern predicts returns"
 2. **Statistical reliability**: 
    - If p is null: "No statistical test was completed - we cannot assess if this pattern is reliable"
-   - If p ≥ 0.10: "p-value of {p} means there's a {p*100}% chance this is random noise - the pattern is NOT statistically reliable"
-   - If p < 0.10 but q ≥ 0.10: "p-value of {p} suggests significance, but q-value of {q} means it doesn't survive multiple testing correction - may be a false positive"
-   - If q < 0.10: "q-value of {q} means this pattern survives multiple testing correction - statistically reliable"
+   - If p ≥ 0.10: "p-value of [p] means there's a [p*100]% chance this is random noise - the pattern is NOT statistically reliable"
+   - If p < 0.10 but q ≥ 0.10: "p-value of [p] suggests significance, but q-value of [q] means it doesn't survive multiple testing correction - may be a false positive"
+   - If q < 0.10: "q-value of [q] means this pattern survives multiple testing correction - statistically reliable"
 3. **Effect size**: 
    - If effect is null: "No effect measured - cannot assess profitability"
-   - If effect_bps < 30: "Effect of {effect_bps} bps is too small - returns likely won't cover trading costs"
-   - If effect_bps ≥ 30: "Effect of {effect_bps} bps ({effect_bps/100}%) is meaningful - pattern produces positive returns"
+   - If effect_bps < 30: "Effect of [effect_bps] bps is too small - returns likely won't cover trading costs"
+   - If effect_bps ≥ 30: "Effect of [effect_bps] bps ([effect_bps/100]%) is meaningful - pattern produces positive returns"
 4. **Confidence**: 
    - If CI is null: "No confidence interval - cannot assess uncertainty"
-   - If CI includes zero: "CI [{ci[0]}, {ci[1]}] includes zero - cannot rule out zero or negative returns"
-   - If CI both positive: "CI [{ci[0]}, {ci[1]}] shows consistently positive returns with 95% confidence"
+   - If CI includes zero: "CI [lower, upper] includes zero - cannot rule out zero or negative returns"
+   - If CI both positive: "CI [lower, upper] shows consistently positive returns with 95% confidence"
 
 **ECONOMICS INTERPRETATION**:
 - If net_median is null: "Cannot calculate expected returns after costs - insufficient data or pattern failed"
-- If net_median ≤ 0: "Expected returns of {net_median}% are not positive after trading costs - this trade is unprofitable"
-- If net_median > 0: "Expected returns of {net_median}% exceed trading costs - this trade is profitable"
+- If net_median ≤ 0: "Expected returns of [net_median]% are not positive after trading costs - this trade is unprofitable"
+- If net_median > 0: "Expected returns of [net_median]% exceed trading costs - this trade is profitable"
 
 **EXECUTIVE SUMMARY STRUCTURE** (200+ words for BUY/REVIEW, 150+ for SKIP):
-1. **Opening**: "We tested the EMA crossover pattern for {ticker}..."
-2. **Pattern Status**: "The pattern is [present/weak/absent] (drivers.pattern = {drivers.pattern})..."
+1. **Opening**: "We tested the EMA crossover pattern for [ticker]..."
+2. **Pattern Status**: "The pattern is [present/weak/absent] (drivers.pattern = [value])..."
 3. **Statistical Results**: "The statistical tests show [reliable/unreliable] because [specific p/q/effect interpretation]..."
 4. **Economics**: "After accounting for trading costs, [net_median interpretation]..."
 5. **Decision**: "Therefore, we [BUY/REVIEW/SKIP] because [specific evidence from above]..."
