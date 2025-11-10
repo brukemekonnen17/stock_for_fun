@@ -1,0 +1,8 @@
+{
+  "ticker": "NVDA",
+  "window_days": 365,
+  "data_source": "cache",
+  "seed": 42,
+  "run_timestamp_utc": "2025-11-10T03:39:37.606078",
+  "m1_checks_passed": true
+}

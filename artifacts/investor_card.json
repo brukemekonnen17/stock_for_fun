@@ -1,0 +1,35 @@
+{
+  "ticker": "NVDA",
+  "timestamp": "2025-11-09 22:39:27",
+  "verdict": "REVIEW",
+  "score": 0.0,
+  "drivers": {
+    "pattern": "YELLOW",
+    "participation": "YELLOW",
+    "sector_rs": "N/A",
+    "iv_rv": "N/A",
+    "meme": "LOW"
+  },
+  "evidence": {
+    "horizon": 1,
+    "effect_g": null,
+    "ci_95": "[nan, nan]",
+    "p_value": null,
+    "q_value": null,
+    "hit_rate": null
+  },
+  "plan": {
+    "entry": 188.15,
+    "stop": 173.14717142857143,
+    "target": 210.65424285714286,
+    "risk_reward": 1.4999999999999991,
+    "worst_loss_pct": -8.102612301831746
+  },
+  "risks": [
+    "Net returns not positive after costs",
+    "CAR does not support signal",
+    "Regime not aligned"
+  ],
+  "why_now": "Review conditions.",
+  "car_ci": "N/A"
+}

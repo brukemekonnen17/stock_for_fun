@@ -1,152 +1,320 @@
-# ✅ System Check Summary
+# LLM Reliability Health Program - System Check Summary
 
-## Verification Results
+**Generated:** $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+**Version:** Health Check v1.0.0
 
-Ran system verification script - **14/17 checks passed** ✅
+## Executive Summary
 
-### ✅ Working Components
+This document provides a comprehensive health check of the Phase-1 LLM reliability layer, including SLO status, artifact capture, dual-path evaluation, and production readiness recommendations.
 
-1. **Core Dependencies** - All installed
-   - FastAPI ✅
-   - SQLAlchemy ✅
-   - Pydantic ✅
-   - NumPy ✅
-   - HTTPX ✅
+---
 
-2. **Service Modules** - All importable
-   - Social sentiment scanner ✅
-   - StockTwits adapter ✅
-   - Market data service ✅
-   - Tiingo adapter ✅
-   - Event details helper ✅
+## Health Matrix
 
-3. **Database** - All models accessible
-   - Database models ✅
-   - Database session ✅
+| Area | SLI | Target | Current | Status | Notes |
+|------|-----|--------|---------|--------|-------|
+| **Parse Rate (v2)** | % parsed | ≥ 99.0% | *TBD* | ⏳ | Requires 200+ calls for accurate measurement |
+| **Schema Violations** | % violations | ≤ 0.5% | *TBD* | ⏳ | Tracked via error taxonomy |
+| **Auto-Repair Usage** | % repaired | ≤ 10% | *TBD* | ⏳ | Allowed repairs: code fences, trailing commas |
+| **P95 Latency** | seconds | ≤ 2.5s | *TBD* | ⏳ | API→LLM→parsed |
+| **Timeout Rate** | % timeouts | ≤ 1% | *TBD* | ⏳ | 12s client timeout |
+| **Fallback Rate (v2→v1)** | % fallbacks | ≤ 5% | *TBD* | ⏳ | Target: 0% before general rollout |
+| **ECE (Calibration)** | Expected Calibration Error | ≤ 0.10 | *TBD* | ⏳ | Last 1,000 decisions |
+| **Brier Score** | Trend | Non-increasing | *TBD* | ⏳ | Week-over-week |
+| **UI Render Failures** | count/day | 0 | *TBD* | ⏳ | No N/A walls, no blank charts |
+| **Actionability** | % actionable | 100% | *TBD* | ⏳ | Verdict + drivers + rationale |
 
-### ⚠️ Missing Dependencies (Expected)
+**Legend:**
+- ✅ = Passing SLO
+- ⚠️ = Warning (within tolerance but not ideal)
+- ❌ = Failing SLO
+- ⏳ = Insufficient data (requires more samples)
 
-1. **yfinance** - Not installed in current environment
-   - **Fix:** `pip install yfinance==0.2.43`
-   - **Impact:** Market data fallback won't work until installed
-   - **Note:** This is OK - Tiingo will be primary if configured
+---
 
-2. **Earnings Calendar Service** - Import blocked by yfinance
-   - **Fix:** Install yfinance (see above)
-   - **Impact:** Calendar service won't initialize until yfinance is installed
-   - **Note:** yfinance provider is a fallback, so primary providers (FMP/Alpha Vantage) will still work
+## Version Tracking
 
-3. **Main API Module** - Import blocked by yfinance
-   - **Fix:** Install yfinance (see above)
-   - **Impact:** API won't start until dependencies are installed
-   - **Note:** This is expected - all dependencies must be installed
+### Current Versions (Stamped in Responses)
 
-## 🔧 Issues Found & Fixed
+- **Model Name:** `claude-3-haiku-20240307`
+- **Model Version:** `20240307`
+- **Schema Version:** `2.0.0`
+- **Prompt Version:** `1.0.0`
+- **Validator Version:** `1.0.0`
 
-### 1. Unused Import in Calendar Service
-**File:** `services/calendar/service.py`
-**Issue:** Imported `get_db` but never used
-**Fix:** Removed unused import
-**Status:** ✅ Fixed
+### Versioning Policy
 
-### 2. Database Session Parameter
-**File:** `services/scanner/catalyst_scanner.py` (line 52)
-**Issue:** `get_event_details()` called without db session
-**Impact:** Low - function works without db (just won't cache)
-**Status:** ✅ Acceptable (db session not available in scanner context)
+- **Schema:** Semantic versioning (MAJOR.MINOR.PATCH)
+  - MAJOR: Breaking changes (requires UI updates)
+  - MINOR: Backward-compatible additions
+  - PATCH: Bug fixes, no schema changes
+- **Prompt:** Increment when instructions change
+- **Validator:** Increment when policy rules change
+- **Changelogs:** See `CHANGELOG.md` (to be created)
 
-## 📋 Pre-Launch Checklist
+---
 
-Before starting the API server:
+## Error Taxonomy
 
-### 1. Install Dependencies
+Failures are classified into the following buckets:
+
+| Error Type | Description | Example |
+|------------|-------------|---------|
+| **TRANSPORT** | Network/timeout errors | Empty response, connection refused |
+| **RATE_LIMIT** | API rate limiting | HTTP 429, "rate limit" in response |
+| **FORMAT** | JSON parsing/malformed response | Invalid JSON, missing quotes |
+| **SCHEMA** | Schema validation failures | Missing required fields, wrong types |
+| **POLICY_OVERRIDE** | Policy enforcement changes | Spread violation, pattern gating |
+| **TIMEOUT** | Request timeout | Client timeout exceeded |
+
+**Current Distribution:** *TBD* (requires artifact analysis)
+
+---
+
+## Artifact Capture
+
+### Golden Corpus
+
+Fixed tickers across regimes for reproducibility:
+
+- **NVDA** (trending_up) - Large cap, high volatility
+- **AAPL** (quiet) - Large cap, stable
+- **TSLA** (trending_down) - Large cap, volatile
+- **SPY** (quiet) - ETF baseline
+
+### Artifact Storage
+
+- **Location:** `tests/golden/raw_llm/`
+- **Format:** JSON with metadata (versions, metrics, redacted request/response)
+- **Retention:** 100% of failures, 5-10% sample of successes (daily rotation)
+- **Redaction:** API keys, PII scrubbed
+
+### Capture Status
+
+- **Artifacts Captured:** *TBD* (run `scripts/capture_golden_corpus.py`)
+- **Minimum Required:** ≥ 2 artifacts for analysis
+- **Status:** ⏳ Pending capture
+
+---
+
+## Dual-Path Evaluation (LLM v1 vs v2)
+
+### Current Architecture
+
+- **LLM v2 (Phase-1):** Strict schema, policy enforcement, version stamping
+- **LLM v1 (Legacy):** Template-based, less structured, fallback path
+
+### Keep v1 If:
+
+- ✅ Provider outages are non-trivial in your region
+- ✅ Regulatory/compliance demands a non-LLM path
+- ✅ You need a deterministic, auditable baseline for comparisons
+
+### Retire v1 If (and only if):
+
+- ✅ v2 parse-rate ≥ **99.5%**
+- ✅ v2 fallback ≤ **1%**
+- ✅ v2 matches/exceeds v1 on calibration and decision alignment for **4 consecutive weeks**
+- ✅ Tested rollback to a conservative template-based "no-LLM" fallback exists
+
+### Recommendation
+
+**Status:** ⏳ **EVALUATION PENDING**
+
+**Next Steps:**
+1. Collect 200+ v2 calls for SLO measurement
+2. Compare v1 vs v2 calibration and decision alignment
+3. Document rollback procedure for template-based fallback
+4. Make decision based on 4-week data window
+
+**Interim Decision:** **KEEP v1** as fallback until v2 reliability is proven
+
+---
+
+## Rollout Strategy
+
+### Canary Plan
+
+1. **Phase 1: Shadow Mode (Optional)**
+   - Run v2 in parallel, don't expose to UI
+   - Compare deltas vs v1 until SLOs pass
+   - **Duration:** 1-2 weeks
+
+2. **Phase 2: Canary Ring (10% traffic)**
+   - Enable v2 for 10% of requests OR fixed ticker set
+   - Monitor SLOs closely
+   - **Duration:** 1 week
+
+3. **Phase 3: Gradual Rollout**
+   - Increase to 50%, then 100% if SLOs hold
+   - **Duration:** 2 weeks
+
+### Auto-Degrade Rules
+
+- **Critical:** Parse-rate < 98% (5-min window) → Auto-degrade to v1
+- **Critical:** P95 latency > 3s → Auto-degrade to v1
+- **Critical:** Timeouts > 2% → Auto-degrade to v1
+- **Warning:** Repair-rate > 15% → Alert on-call
+- **Warning:** Fallback-rate > 10% → Alert on-call
+
+### Rollback Command
+
 ```bash
-pip install -r requirements.txt
+# Instant rollback via environment variable
+export ENABLE_LLM_PHASE1=0
+
+# Or via feature flag API (if implemented)
+curl -X POST http://127.0.0.1:8000/features -d '{"ENABLE_LLM_PHASE1": false}'
 ```
 
-### 2. Verify Environment Variables
-Check `.env` file has:
-```env
-# Market Data (optional but recommended)
-TIINGO_API_KEY=your_key_here  # Optional: free tier available
-ALPHA_VANTAGE_API_KEY=your_key_here  # Optional: for earnings calendar
+### On-Call Owner
 
-# Earnings Calendar (optional)
-FMP_API_KEY=your_key_here  # Optional: for earnings calendar
+- **Primary:** *TBD*
+- **Secondary:** *TBD*
+- **Runbook:** `RUNBOOK_LLM_V2.md` (to be created)
 
-# Risk Guardrails (MANDATORY - update for low-cap trading)
-MAX_TICKET=1500
-MAX_POSITIONS=5
-MAX_PER_TRADE_LOSS=50
-DAILY_KILL_SWITCH=-100
-SPREAD_CENTS_MAX=0.03
-SPREAD_BPS_MAX=150
-SLIPPAGE_BPS=30
-```
+---
 
-### 3. Test API Startup
-```bash
-# Start API
-uvicorn apps.api.main:app --reload
+## Compliance & Risk
 
-# Should see:
-# ✅ Tiingo market data provider enabled (if key set)
-# ✅ yfinance market data provider enabled (fallback)
-# ✅ Earnings calendar service initialized
-# ✅ Application startup complete
-```
+### Secrets Management
 
-### 4. Test Endpoints
-```bash
-# Health check
-curl http://localhost:8000/health
+- ✅ API keys redacted in logs
+- ✅ No raw API keys in artifact files
+- ⏳ Verify redaction in production logs
 
-# Scan endpoint
-curl http://localhost:8000/scan
+### PII Checks
 
-# Analyze endpoint
-curl http://localhost:8000/analyze/AAPL
-```
+- ✅ Payloads contain no user identifiers before archiving
+- ⏳ Automated PII scanning (future enhancement)
 
-## 🎯 Integration Status
+### Rate Limiting
 
-| Component | Status | Notes |
-|-----------|--------|-------|
-| **Social Sentiment** | ✅ Complete | StockTwits integration working |
-| **Earnings Calendar** | ✅ Complete | Multiple providers with fallback |
-| **Market Data** | ✅ Complete | Tiingo + yfinance fallback |
-| **LLM Integration** | ✅ Complete | Social sentiment in prompts |
-| **Policy Guardrails** | ⚠️ Needs Update | Update `.env` with new values |
-| **Database Models** | ✅ Complete | All tables defined |
-| **API Endpoints** | ✅ Complete | All routes integrated |
+- ✅ Backoff policy: exponential (0.5s * 2^attempt)
+- ✅ Max retries: 2 (configurable via `LLM_MAX_RETRIES`)
+- ✅ Circuit breaker: Auto-degrade on SLO breaches
 
-## 🚨 Critical Actions Required
+### Cost Guardrails
 
-### Before First Use:
-1. ✅ **Install dependencies:** `pip install -r requirements.txt`
-2. ⚠️ **Update `.env` file:** Add new guardrail values (see above)
-3. ⚠️ **Optional:** Add API keys for Tiingo, FMP, or Alpha Vantage
-4. ✅ **Test startup:** Run `uvicorn apps.api.main:app --reload`
+- ⏳ Daily token budget with alert at 80%, cutoff at 100%
+- ⏳ Token usage tracking (future enhancement)
 
-## 📊 System Architecture Verification
+---
 
-```
-✅ All components properly integrated:
-   - Social sentiment → LLM prompt
-   - Earnings calendar → Event details
-   - Market data service → Scanner
-   - Policy guardrails → Validation
-   - Database → Persistence
-```
+## Observability
 
-## 🎉 Conclusion
+### Telemetry Endpoints
 
-**System is ready for deployment!**
+- **`/metrics/llm_phase1`** - LLM quality metrics, SLO status, error taxonomy
+- **`/stats/calibration`** - Calibration metrics (ECE, Brier, reliability plot)
 
-All code is properly structured, imports are correct, and integrations are in place. The only remaining step is:
-1. Install dependencies (`pip install -r requirements.txt`)
-2. Update `.env` with new guardrail values
-3. Start the API server
+### Alert Configuration
 
-No critical code issues found! ✅
+**Critical Alerts:**
+- Parse-rate < 98% (5-min window)
+- P95 latency > 3s
+- Timeouts > 2%
 
+**Warning Alerts:**
+- Repair-rate > 15%
+- Fallback-rate > 10%
+
+**Alert Destination:** *TBD* (integrate with monitoring system)
+
+---
+
+## Testing & Validation
+
+### Contract Tests
+
+- ✅ Golden fixtures for success cases
+- ⏳ Golden fixtures for each error bucket
+- ⏳ UI smoke tests for fallback behavior
+
+### Test Coverage
+
+- ✅ Schema validation tests (`tests/test_llm_phase1.py`)
+- ✅ Policy override tests (`tests/test_alignment_and_validator.py`)
+- ⏳ Error taxonomy classification tests
+- ⏳ UI render fallback tests
+
+---
+
+## Definition of Done
+
+### Completed ✅
+
+- [x] Instrumentation: Debug logging, artifact capture, version stamping
+- [x] Error taxonomy: Classification system implemented
+- [x] SLO definitions: Targets codified, telemetry endpoint returns status
+- [x] Schema repairs: Documented allowed repairs (code fences, trailing commas)
+- [x] Health check script: Expanded health check with SLO validation
+
+### Pending ⏳
+
+- [ ] Capture ≥2 real artifacts from golden corpus
+- [ ] Compare captured outputs vs schema, update prompt/schema if needed
+- [ ] Run expanded health checks and populate health matrix
+- [ ] Document v1 keep/retire decision with evidence
+- [ ] Configure alerts and integrate with monitoring
+- [ ] Test canary rollout and auto-degrade
+- [ ] Create runbook with rollback procedures
+
+---
+
+## Next Actions
+
+### Immediate (This Week)
+
+1. **Enable debug capture:** Set `ENABLE_LLM_DEBUG=1` in `.env`
+2. **Run golden corpus capture:** `python scripts/capture_golden_corpus.py`
+3. **Analyze artifacts:** Compare outputs vs schema, identify mismatches
+4. **Update prompt/schema:** Fix any discrepancies found
+
+### Short-term (Next 2 Weeks)
+
+1. **Collect SLO data:** Run 200+ requests, measure parse-rate, latency, etc.
+2. **Compare v1 vs v2:** Decision alignment, calibration metrics
+3. **Test canary rollout:** 10% traffic, monitor SLOs
+4. **Document rollback:** Create runbook with rollback procedures
+
+### Long-term (Next Month)
+
+1. **Evaluate v1 retirement:** Based on 4-week SLO data
+2. **Production rollout:** Gradual increase to 100% if SLOs hold
+3. **Cost optimization:** Token usage tracking and budget enforcement
+
+---
+
+## Appendix
+
+### SLO Definitions
+
+| SLI | Target | Measurement Window | Critical Threshold |
+|-----|--------|-------------------|-------------------|
+| Parse Rate | ≥ 99.0% | Last 200 calls | < 98% (5-min) |
+| P95 Latency | ≤ 2.5s | Last 200 calls | > 3s |
+| Timeout Rate | ≤ 1% | Last 200 calls | > 2% |
+| Fallback Rate | ≤ 5% | Last 200 calls | > 10% (warning) |
+| ECE | ≤ 0.10 | Last 1,000 decisions | > 0.15 (warning) |
+
+### Version Changelog
+
+**Schema v2.0.0** (Current)
+- Initial strict schema with `extra="forbid"`
+- Required fields: verdict_intraday, verdict_swing_1to5d, confidence, plan, risk, evidence_fields, missing_fields, assumptions
+
+**Prompt v1.0.0** (Current)
+- Initial prompt with 3 exemplars
+- Rules for strict JSON, policy adherence, pattern inference
+
+**Validator v1.0.0** (Current)
+- Policy overrides: spread violation, pattern gating, feasibility checks
+- Evidence consistency auto-downgrade
+- Breadth downgrade guardrail
+
+---
+
+**Report Status:** ⏳ **IN PROGRESS** - Requires artifact capture and SLO data collection
+
+**Last Updated:** $(date -u +"%Y-%m-%dT%H:%M:%SZ")

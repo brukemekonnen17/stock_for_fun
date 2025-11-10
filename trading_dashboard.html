@@ -1381,6 +1381,28 @@
             color: #ef4444;
         }
 
+        /* Feature banner and Safe Mode toggle */
+        .feature-banner {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 16px;
+            background: rgba(255,255,255,0.03);
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+
+        .toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        .toggle input[type="checkbox"] {
+            cursor: pointer;
+        }
+
         /* Adjust container to account for sidebar */
         .container {
             margin-left: 320px;
@@ -1406,6 +1428,15 @@
     </aside>
 
     <div class="container">
+        <!-- Feature Banner with Safe Mode Toggle -->
+        <div id="feature-banner" class="feature-banner">
+            <span id="safe-mode-pill" class="pill pill-muted">Safe Mode</span>
+            <label class="toggle">
+                <input id="toggle-llm" type="checkbox">
+                <span>Use LLM v2</span>
+            </label>
+        </div>
+        
         <!-- DEBUG PANEL (Only shown with ?debug=1) -->
         <div id="debug-panel" style="display: none; background: #1a1a1a; color: #00ff00; padding: 20px; border-radius: 8px; margin-bottom: 20px; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto;">
             <div style="color: #ffff00; font-weight: bold; margin-bottom: 10px;">🔍 DIAGNOSTIC PANEL (Live Debug Info) - Add ?debug=1 to URL to enable</div>
@@ -1445,6 +1476,76 @@
         let priceChart = null;
         let rsiChart = null;
         
+        // Feature flags - initialized from /features endpoint
+        let FEATURES = {
+            safeMode: true,
+            useLlmV2: false,
+            driversLegend: true,
+            calibrationChip: true,
+            plotlyPanels: true
+        };
+        
+        // Initialize features from backend
+        async function initFeatures() {
+            try {
+                const res = await fetch(`${API_BASE}/features`);
+                if (res.ok) {
+                    const f = await res.json();
+                    FEATURES = {...FEATURES, ...f};
+                }
+            } catch (e) {
+                console.warn('Failed to fetch features:', e);
+            }
+            
+            // Paint banner
+            const pill = document.getElementById('safe-mode-pill');
+            if (pill) {
+                pill.classList.remove('pill-green', 'pill-red', 'pill-muted');
+                if (FEATURES.safeMode) {
+                    pill.classList.add('pill-red');
+                    pill.textContent = 'Safe Mode';
+                } else {
+                    pill.classList.add('pill-green');
+                    pill.textContent = 'Live Mode';
+                }
+            }
+            
+            const t = document.getElementById('toggle-llm');
+            if (t) {
+                t.checked = !!FEATURES.useLlmV2;
+                t.addEventListener('change', async (ev) => {
+                    alert('Toggle requires server env change: ENABLE_LLM_PHASE1=' + (ev.target.checked ? '1' : '0'));
+                    // For now: reflect UI then re-analyze current ticker if available
+                    if (currentAnalysis && currentAnalysis.analysis?.ticker) {
+                        analyzeStock(currentAnalysis.analysis.ticker);
+                    }
+                });
+            }
+        }
+        
+        // Pick AI output (prefer v2, fallback to v1, otherwise null)
+        function pickAI(analysis) {
+            return analysis?.llm_v2 ?? analysis?.llm ?? null;
+        }
+        
+        // Robust AI section renderer
+        function renderAISection(analysis) {
+            const ai = pickAI(analysis);
+            const textEl = document.querySelector('#ai-trader-analysis');
+            const confEl = document.querySelector('#confidence-value');
+            if (!textEl || !confEl) return;
+            
+            if (!ai) {
+                textEl.textContent = 'Analysis deferred (LLM disabled in Safe Mode).';
+                confEl.textContent = '—';
+                return;
+            }
+            
+            const conf = ai?.confidence;
+            confEl.textContent = (conf == null) ? '—' : `${Math.round(conf * 100)}%`;
+            textEl.textContent = ai?.plan?.rationale || ai?.explanation || '—';
+        }
+        
         // DEBUG LOGGER - Only logs if debug panel exists
         function debugLog(message, type = 'info') {
             const output = document.getElementById('debug-output');
@@ -1472,6 +1573,9 @@
         
         // Test on load - only if debug mode
         window.addEventListener('DOMContentLoaded', () => {
+            // Initialize features
+            initFeatures();
+            
             // Show debug panel if debug mode enabled
             const debugPanel = document.getElementById('debug-panel');
             if (DEBUG_MODE && debugPanel) {
@@ -2278,7 +2382,7 @@
                 debugLog(`Fetching /surge/${ticker} and /history/${ticker}...`, 'info');
                 const [surgeRes, historyRes] = await Promise.all([
                     fetch(`${API_BASE}/surge/${ticker}`),
-                    fetch(`${API_BASE}/history/${ticker}?days=30`)
+                    fetch(`${API_BASE}/history/${ticker}?days=365`)
                 ]);
                 
                 if (surgeRes.ok) {
@@ -2773,7 +2877,7 @@
                         </div>
                         <div class="evidence-panel">
                             ${analysis.evidence.tests && analysis.evidence.tests.length > 0 ? analysis.evidence.tests.slice(0, 3).map((test, idx) => {
-                                const badge = test.p_value !== null ? formatSignificanceBadge(test.p_value) : '';
+                                const badge = (test.p_value !== null && test.p_value !== undefined) ? formatSignificanceBadge(test.p_value) : '';
                                 const grade = computeEffectGrade(test.p_value, test.effect_size);
                                 return `
                                     <div class="evidence-test" style="border-left: 3px solid ${test.decision_implication && test.decision_implication.includes('✅') ? 'var(--ft-green)' : test.decision_implication && test.decision_implication.includes('❌') ? 'var(--ft-red)' : 'var(--ft-text-light)'}; padding-left: 12px; margin-bottom: 16px;">
@@ -2783,21 +2887,21 @@
                                             ${badge ? `<span class="significance-badge">${badge}</span>` : ''}
                                         </div>
                                         <div class="evidence-hypothesis">${test.hypothesis}</div>
-                                        ${test.effect_size !== null ? `
+                                        ${test.effect_size !== null && test.effect_size !== undefined ? `
                                             <div class="evidence-effect">
                                                 <span class="effect-label">Effect:</span>
-                                                <span class="effect-value">${test.effect_size.toFixed(3)}</span>
-                                                ${test.ci_low !== null && test.ci_high !== null ? `
-                                                    <span class="effect-ci">[${test.ci_low.toFixed(3)}, ${test.ci_high.toFixed(3)}]</span>
+                                                <span class="effect-value">${typeof test.effect_size === 'number' ? test.effect_size.toFixed(3) : test.effect_size}</span>
+                                                ${test.ci_low !== null && test.ci_low !== undefined && test.ci_high !== null && test.ci_high !== undefined ? `
+                                                    <span class="effect-ci">[${typeof test.ci_low === 'number' ? test.ci_low.toFixed(3) : test.ci_low}, ${typeof test.ci_high === 'number' ? test.ci_high.toFixed(3) : test.ci_high}]</span>
                                                 ` : ''}
                                             </div>
                                         ` : ''}
-                                        ${test.p_value !== null ? `
+                                        ${test.p_value !== null && test.p_value !== undefined ? `
                                             <div class="evidence-pvalue">
                                                 <span class="pvalue-label">p-value:</span>
-                                                <span class="pvalue-value ${test.p_value < 0.05 ? 'significant' : ''}">${test.p_value.toFixed(4)}</span>
+                                                <span class="pvalue-value ${test.p_value < 0.05 ? 'significant' : ''}">${typeof test.p_value === 'number' ? test.p_value.toFixed(4) : test.p_value}</span>
                                             </div>
-                                        ` : ''}
+                                        ` : '<div class="evidence-pvalue"><span class="pvalue-label">p-value:</span><span class="pvalue-value">N/A (bootstrap CI)</span></div>'}
                                         ${test.decision_label ? `
                                             <div class="evidence-decision" style="margin-top: 12px;">
                                                 <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
@@ -2903,7 +3007,7 @@
                             <div class="card-header">
                                 <div>
                                     <div class="card-title">Price Action & Technical Indicators</div>
-                                    <div class="card-subtitle">30-Day Time Series with Moving Averages & Support/Resistance</div>
+                                    <div class="card-subtitle">1-Year Daily Time Series with Moving Averages & Support/Resistance</div>
                                 </div>
                             </div>
                             <div id="panel-candles" style="height:420px; width:100%;"></div>
@@ -2975,6 +3079,21 @@
                                 </div>
                             ` : ''}
                         </div>
+
+                        <!-- LLM v2 Raw Output -->
+                        ${analysis.llm_v2 ? `
+                        <div class="card" style="border-left: 4px solid var(--ft-blue); margin-top: 24px;">
+                            <div class="card-header">
+                                <div>
+                                    <div class="card-title">🤖 LLM v2 Analysis Output (Raw)</div>
+                                    <div class="card-subtitle">Complete LLM v2 prompt results displayed as-is</div>
+                                </div>
+                            </div>
+                            <div style="padding: 16px;">
+                                <pre style="background: #1e1e1e; color: #d4d4d4; padding: 16px; border-radius: 4px; overflow-x: auto; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace; font-size: 12px; line-height: 1.6; margin: 0;">${JSON.stringify(analysis.llm_v2, null, 2)}</pre>
+                            </div>
+                        </div>
+                        ` : ''}
 
                         <!-- Strategy Rationale -->
                         <div class="strategy-card">
@@ -3143,7 +3262,11 @@
             renderAlignmentPill(analysis.alignment || alignment);
             
             // Render drivers legend
-            renderDriversLegend(analysis.drivers);
+            // Always render drivers (with fallbacks)
+            renderDriversLegend(analysis.drivers || {});
+            
+            // Render AI section (handles Safe Mode)
+            renderAISection(analysis);
             
             // Store analysis and plan globally for action slab
             window.__analysis = data;

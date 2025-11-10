@@ -1,8 +1,9 @@
 """
 Market Data Provider Service with intelligent fallback chain
-Orchestrates multiple providers (Tiingo -> yfinance) for reliable data access
+Orchestrates multiple providers (Tiingo -> Alpha Vantage -> yfinance) for reliable data access
 """
 import logging
+import os
 from typing import Optional, Dict, Any, List
 from datetime import datetime
 
@@ -13,17 +14,19 @@ class MarketDataProviderService:
     Primary service for market data, implementing a reliable provider fallback chain.
     
     Strategy:
-    1. Try Tiingo (production-grade, reliable)
-    2. Fallback to yfinance (free but unreliable)
-    3. Log source for monitoring and debugging
+    1. Try Tiingo (production-grade, reliable) - if TIINGO_API_KEY is set
+    2. Fallback to Alpha Vantage (reliable, free tier: 5 calls/min) - if ALPHA_VANTAGE_API_KEY is set
+    3. Fallback to yfinance (free but unreliable, prone to rate limits)
+    4. Log source for monitoring and debugging
     """
     
     def __init__(self):
         """Initialize service with provider chain"""
         from .tiingo_adapter import TiingoAdapter
+        from .alphavantage_adapter import AlphaVantageAdapter
         from .yf_adapter import YFMarketData
         
-        # Order matters: Tiingo (primary) -> YFinance (fallback)
+        # Order matters: Tiingo (primary) -> Alpha Vantage -> YFinance (fallback)
         self.providers = []
         
         # Add Tiingo if configured
@@ -37,7 +40,18 @@ class MarketDataProviderService:
         except Exception as e:
             logger.warning(f"Failed to initialize Tiingo adapter: {e}")
         
-        # Always add yfinance as fallback
+        # Add Alpha Vantage if configured (reliable alternative)
+        try:
+            if os.getenv("ALPHA_VANTAGE_API_KEY"):
+                av = AlphaVantageAdapter()
+                self.providers.append(av)
+                logger.info("✅ Alpha Vantage market data provider enabled")
+            else:
+                logger.info("⚠️ Alpha Vantage provider disabled (no API key)")
+        except Exception as e:
+            logger.warning(f"Failed to initialize Alpha Vantage adapter: {e}")
+        
+        # Always add yfinance as last fallback
         try:
             yf = YFMarketData()
             self.providers.append(yf)

@@ -1,0 +1,88 @@
+{
+  "analysis_id": "27905f9a-0a9c-4bf4-b533-d679c72d16ea",
+  "ticker": "NVDA",
+  "window_days": 365,
+  "timestamp": "2025-11-09T22:39:46.639068",
+  "drivers": {
+    "pattern": "GREEN",
+    "sector_rs": "+",
+    "iv_rv": "N/A",
+    "meme": "MED"
+  },
+  "evidence": [
+    {
+      "test": "EMA_Crossover",
+      "H": 1,
+      "effect": null,
+      "ci": null,
+      "p": null,
+      "q": null
+    },
+    {
+      "test": "EMA_Crossover",
+      "H": 3,
+      "effect": null,
+      "ci": null,
+      "p": null,
+      "q": null
+    },
+    {
+      "test": "EMA_Crossover",
+      "H": 5,
+      "effect": null,
+      "ci": null,
+      "p": null,
+      "q": null
+    },
+    {
+      "test": "EMA_Crossover",
+      "H": 10,
+      "effect": null,
+      "ci": null,
+      "p": null,
+      "q": null
+    },
+    {
+      "test": "EMA_Crossover",
+      "H": 20,
+      "effect": null,
+      "ci": null,
+      "p": null,
+      "q": null
+    }
+  ],
+  "economics": {
+    "net_median": null,
+    "net_p90": null,
+    "blocked": true
+  },
+  "plan": {
+    "entry_price": 188.15,
+    "stop_price": 173.14717142857143,
+    "target_price": 210.65424285714286,
+    "stop_pct": -7.973865836528615,
+    "target_pct": 11.9607987547929,
+    "atr_used": 7.501414285714284,
+    "worst_entry": 188.281705,
+    "worst_exit": 173.02596840857143,
+    "worst_loss_pct": -8.102612301831746,
+    "worst_loss_abs": 15.255736591428558,
+    "risk_reward": 1.4999999999999991,
+    "total_cost_bps": 7.0,
+    "policy_ok": false
+  },
+  "risks": [
+    "Net returns not positive after costs",
+    "CAR does not support signal",
+    "Regime not aligned"
+  ],
+  "why_now": "Review conditions.",
+  "verdict": "YELLOW",
+  "artifacts": {
+    "candles_html": "artifacts/candles.html",
+    "candles_png": "artifacts/candles.png",
+    "car_chart_html": "artifacts/car_chart.html",
+    "net_returns_dist_html": "artifacts/net_returns_dist.html",
+    "investor_card_json": "artifacts/investor_card.json"
+  }
+}

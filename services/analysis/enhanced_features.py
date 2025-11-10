@@ -53,6 +53,43 @@ def compute_sector_relative_strength(
         return 1.0
 
 
+def build_drivers(drivers_in: dict | None, analysis: dict | None) -> dict:
+    """
+    Ensure drivers always present with fallback logic.
+    
+    Args:
+        drivers_in: Existing drivers dict (may be partial or None)
+        analysis: Full analysis dict (may contain llm_v2, pattern, etc.)
+    
+    Returns:
+        Complete drivers dict with all required keys
+    """
+    drivers_in = drivers_in or {}
+    analysis = analysis or {}
+    llm = (analysis.get("llm_v2") or {})
+    
+    pattern = (drivers_in.get("pattern")
+               or (llm.get("pattern") or {}).get("state")
+               or (analysis.get("pattern") or {}).get("state")
+               or "NONE")
+    participation = (drivers_in.get("participation")
+                     or (llm.get("participation") or {}).get("quality")
+                     or "LOW")
+    srs = drivers_in.get("sector_relative_strength", analysis.get("sector_relative_strength"))
+    ivrv = drivers_in.get("iv_minus_rv", analysis.get("iv_minus_rv"))
+    meme = drivers_in.get("meme_risk",
+                          (llm.get("meme_social") or {}).get("diagnosis")
+                          or "NOISE")
+    
+    return {
+        "pattern": str(pattern).upper(),
+        "participation": str(participation).upper(),
+        "sector_relative_strength": srs,
+        "iv_minus_rv": ivrv,
+        "meme_risk": str(meme).upper(),
+    }
+
+
 def compute_iv_rv_gap(
     iv: Optional[float],
     realized_volatility: float
@@ -122,14 +159,18 @@ def compute_participation_quality(
         score += 0.1
     
     # Spread component (0-0.2)
-    spread_bps = (spread / price) * 10000
-    if spread_bps < 10:  # < 10bps
-        score += 0.2
-    elif spread_bps < 25:  # < 25bps
-        score += 0.15
-    elif spread_bps < 50:  # < 50bps
-        score += 0.1
+    if price > 0:
+        spread_bps = (spread / price) * 10000
+        if spread_bps < 10:  # < 10bps
+            score += 0.2
+        elif spread_bps < 25:  # < 25bps
+            score += 0.15
+        elif spread_bps < 50:  # < 50bps
+            score += 0.1
+        else:
+            score += 0.05
     else:
+        # Price is 0 or invalid - give minimum spread score
         score += 0.05
     
     # Classify

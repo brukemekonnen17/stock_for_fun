@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 # --- Updated for Anthropic Claude ---
 API_URL = "https://api.anthropic.com/v1/messages"
 API_KEY = os.getenv("ANTHROPIC_API_KEY")
-MODEL_NAME = "claude-3-haiku-20240307" # Using Haiku for speed as recommended
+MODEL_NAME = "claude-3-5-sonnet-20240620" # Using Sonnet for detailed analysis (better than Haiku)
 MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "2"))
 
 # Import policy constants for LLM template
@@ -43,26 +43,49 @@ async def propose_trade_v2(messages: list[dict]) -> str:
     """
     Ask Anthropic Claude for a trade analysis (Phase-1 LLM layer).
     Returns raw JSON string for strict parsing.
+    
+    Note: Claude Messages API requires system prompt as top-level parameter,
+    not as a message role.
     """
     if not API_KEY:
         logger.error("ANTHROPIC_API_KEY not found in environment.")
         return ""
 
+    # Extract system prompt and user message from messages array
+    system_prompt = ""
+    user_message = None
+    
+    for msg in messages:
+        if msg.get("role") == "system":
+            system_prompt = msg.get("content", "")
+        elif msg.get("role") == "user":
+            user_message = msg
+    
+    if not user_message:
+        logger.error("No user message found in messages array")
+        return ""
+    
     headers = {
         "x-api-key": API_KEY,
         "anthropic-version": "2023-06-01",
         "content-type": "application/json"
     }
+    
+    # Claude Messages API format: system is top-level, messages only contains user/assistant
     body = {
         "model": MODEL_NAME,
-        "messages": messages,
-        "max_tokens": 1000,
-        "temperature": 0.0  # Deterministic
+        "messages": [user_message],  # Only user/assistant messages
+        "max_tokens": 8000,  # Increased for detailed analysis responses (Sonnet can handle more)
+        "temperature": 0.1  # Slight temperature for more natural, detailed explanations
     }
+    
+    # Add system prompt as top-level parameter if present
+    if system_prompt:
+        body["system"] = system_prompt
 
     for attempt in range(MAX_RETRIES + 1):
         try:
-            timeout = httpx.Timeout(12.0, connect=5.0)
+            timeout = httpx.Timeout(60.0, connect=10.0)  # Increased timeout for Sonnet's detailed responses
             async with httpx.AsyncClient(timeout=timeout) as client:
                 r = await client.post(API_URL, headers=headers, json=body)
                 r.raise_for_status()

@@ -136,6 +136,7 @@ def compute_evidence_analysis(
     """
     Compute evidence-first statistical tests and analysis.
     """
+    import traceback
     evidence = {
         "tests": [],
         "multiple_testing": {"method": "BH_FDR", "q_values": []},
@@ -152,109 +153,165 @@ def compute_evidence_analysis(
         evidence["assumptions"]["missing"].append("insufficient_historical_data")
         return evidence
     
-    closes = [h["close"] for h in hist]
-    returns = [(closes[i] - closes[i-1]) / closes[i-1] for i in range(1, len(closes))]
-    
-    # Test 1: Volume surge significance (Mann-Whitney: recent vs historical)
-    if len(hist) >= 30:
-        recent_volumes = [h["volume"] for h in hist[-5:]]
-        historical_volumes = [h["volume"] for h in hist[-30:-5]]
+    try:
+        # Extract closes, handling both numeric and dict formats
+        closes = []
+        for h in hist:
+            c = h.get("close")
+            if isinstance(c, (int, float)):
+                closes.append(float(c))
+            elif isinstance(c, dict):
+                c = c.get("value") or c.get("amount") or c.get("close")
+                if isinstance(c, (int, float)):
+                    closes.append(float(c))
         
-        if recent_volumes and historical_volumes:
-            vol_test = mann_whitney_test(recent_volumes, historical_volumes)
-            vol_test.hypothesis = f"Recent 5d volume > historical 25d volume (surge={volume_surge_ratio:.2f}x)"
+        # Filter out any None, NaN, dicts, or invalid values
+        import math
+        closes = [c for c in closes if isinstance(c, (int, float)) and math.isfinite(c) and c > 0]
+        
+        if len(closes) < 10:
+            evidence["assumptions"]["missing"].append("insufficient_price_data")
+            return evidence
+        
+        # Compute returns safely
+        returns = []
+        for i in range(1, len(closes)):
+            if isinstance(closes[i-1], (int, float)) and isinstance(closes[i], (int, float)) and closes[i-1] > 0:
+                ret = (closes[i] - closes[i-1]) / closes[i-1]
+                if isinstance(ret, (int, float)) and ret == ret:  # Check not NaN
+                    returns.append(float(ret))
+        
+        # Test 1: Volume surge significance (Mann-Whitney: recent vs historical)
+        if len(hist) >= 30:
+            # Extract volumes, handling both numeric and dict formats
+            recent_volumes = []
+            for h in hist[-5:]:
+                vol = h.get("volume")
+                if isinstance(vol, (int, float)):
+                    recent_volumes.append(float(vol))
+                elif isinstance(vol, dict):
+                    # If volume is a dict, try common keys
+                    vol = vol.get("value") or vol.get("amount") or vol.get("volume")
+                    if isinstance(vol, (int, float)):
+                        recent_volumes.append(float(vol))
             
+            # Filter out invalid volumes
+            recent_volumes = [v for v in recent_volumes if isinstance(v, (int, float)) and v > 0]
+            
+            historical_volumes = []
+            for h in hist[-30:-5]:
+                vol = h.get("volume")
+                if isinstance(vol, (int, float)):
+                    historical_volumes.append(float(vol))
+                elif isinstance(vol, dict):
+                    vol = vol.get("value") or vol.get("amount") or vol.get("volume")
+                    if isinstance(vol, (int, float)):
+                        historical_volumes.append(float(vol))
+            
+            # Filter out invalid volumes
+            historical_volumes = [v for v in historical_volumes if isinstance(v, (int, float)) and v > 0]
+            
+            if recent_volumes and historical_volumes and len(recent_volumes) >= 3 and len(historical_volumes) >= 10:
+                vol_test = mann_whitney_test(recent_volumes, historical_volumes)
+                vol_test.hypothesis = f"Recent 5d volume > historical 25d volume (surge={volume_surge_ratio:.2f}x)"
+                
+                # Generate actionable interpretation using unified rules
+                vol_decision = interpret_volume_test(
+                    p=vol_test.p_value,
+                    ci_low=vol_test.ci_low,
+                    ci_high=vol_test.ci_high,
+                    volume_surge_ratio=volume_surge_ratio
+                )
+                
+                evidence["tests"].append({
+                    "name": vol_test.name,
+                    "hypothesis": vol_test.hypothesis,
+                    "effect_size": vol_test.effect_size,
+                    "p_value": vol_test.p_value,
+                    "ci_low": vol_test.ci_low,
+                    "ci_high": vol_test.ci_high,
+                    "notes": vol_test.notes,
+                    "decision_implication": vol_decision.rationale,
+                    "decision_label": vol_decision.label,
+                    "decision_color": vol_decision.color,
+                    "decision_severity": vol_decision.severity
+                })
+        
+        # Test 2: Bootstrap CI for median return
+        if len(returns) >= 20:
+            median_r, ci_low, ci_high = bootstrap_ci(returns, np.median, n_bootstrap=1000)
             # Generate actionable interpretation using unified rules
-            vol_decision = interpret_volume_test(
-                p=vol_test.p_value,
-                ci_low=vol_test.ci_low,
-                ci_high=vol_test.ci_high,
-                volume_surge_ratio=volume_surge_ratio
-            )
+            median_decision = interpret_median_return(median_r, ci_low, ci_high)
             
             evidence["tests"].append({
-                "name": vol_test.name,
-                "hypothesis": vol_test.hypothesis,
-                "effect_size": vol_test.effect_size,
-                "p_value": vol_test.p_value,
-                "ci_low": vol_test.ci_low,
-                "ci_high": vol_test.ci_high,
-                "notes": vol_test.notes,
-                "decision_implication": vol_decision.rationale,
-                "decision_label": vol_decision.label,
-                "decision_color": vol_decision.color,
-                "decision_severity": vol_decision.severity
+                "name": "bootstrap_median_r",
+                "hypothesis": "Median return (95% CI)",
+                "effect_size": median_r,
+                "p_value": None,
+                "ci_low": ci_low,
+                "ci_high": ci_high,
+                "notes": f"Median R: {median_r:.4f} [{ci_low:.4f}, {ci_high:.4f}]",
+                "decision_implication": median_decision.rationale,
+                "decision_label": median_decision.label,
+                "decision_color": median_decision.color,
+                "decision_severity": median_decision.severity
             })
-    
-    # Test 2: Bootstrap CI for median return
-    if len(returns) >= 20:
-        median_r, ci_low, ci_high = bootstrap_ci(returns, np.median, n_bootstrap=1000)
-        # Generate actionable interpretation using unified rules
-        median_decision = interpret_median_return(median_r, ci_low, ci_high)
         
-        evidence["tests"].append({
-            "name": "bootstrap_median_r",
-            "hypothesis": "Median return (95% CI)",
-            "effect_size": median_r,
-            "p_value": None,
-            "ci_low": ci_low,
-            "ci_high": ci_high,
-            "notes": f"Median R: {median_r:.4f} [{ci_low:.4f}, {ci_high:.4f}]",
-            "decision_implication": median_decision.rationale,
-            "decision_label": median_decision.label,
-            "decision_color": median_decision.color,
-            "decision_severity": median_decision.severity
-        })
+        # Test 3: Hit rate test (if backtest data available)
+        if backtest_data:
+            wins = backtest_data.get("wins", 0)
+            total = backtest_data.get("samples", 0)
+            if total > 0:
+                hit_rate_test = wilson_binomial_test(wins, total, baseline=0.5)
+                hit_rate_test.hypothesis = f"Hit rate > 50% (observed: {wins}/{total})"
+                
+                # Generate actionable interpretation using unified rules
+                hit_rate_decision = interpret_hit_rate_test(
+                    p=hit_rate_test.p_value,
+                    wins=wins,
+                    total=total
+                )
+                
+                evidence["tests"].append({
+                    "name": hit_rate_test.name,
+                    "hypothesis": hit_rate_test.hypothesis,
+                    "effect_size": hit_rate_test.effect_size,
+                    "p_value": hit_rate_test.p_value,
+                    "ci_low": hit_rate_test.ci_low,
+                    "ci_high": hit_rate_test.ci_high,
+                    "notes": hit_rate_test.notes,
+                    "decision_implication": hit_rate_decision.rationale,
+                    "decision_label": hit_rate_decision.label,
+                    "decision_color": hit_rate_decision.color,
+                    "decision_severity": hit_rate_decision.severity
+                })
+        
+        # FDR correction for multiple tests
+        p_values = [t.get("p_value") for t in evidence["tests"] if t.get("p_value") is not None]
+        if p_values:
+            q_values = benjamini_hochberg_fdr(p_values, alpha=0.05)
+            evidence["multiple_testing"]["q_values"] = [
+                {
+                    "test": evidence["tests"][i].get("name", f"test_{i}"),
+                    "q": q,
+                    "badge": format_fdr_badge(q)[0],
+                    "badge_color": format_fdr_badge(q)[1]
+                }
+                for i, q in enumerate(q_values) if evidence["tests"][i].get("p_value") is not None
+            ]
     
-    # Test 3: Hit rate test (if backtest data available)
-    if backtest_data:
-        wins = backtest_data.get("wins", 0)
-        total = backtest_data.get("samples", 0)
-        if total > 0:
-            hit_rate_test = wilson_binomial_test(wins, total, baseline=0.5)
-            hit_rate_test.hypothesis = f"Hit rate > 50% (observed: {wins}/{total})"
-            
-            # Generate actionable interpretation using unified rules
-            hit_rate_decision = interpret_hit_rate_test(
-                p=hit_rate_test.p_value,
-                wins=wins,
-                total=total
-            )
-            
-            evidence["tests"].append({
-                "name": hit_rate_test.name,
-                "hypothesis": hit_rate_test.hypothesis,
-                "effect_size": hit_rate_test.effect_size,
-                "p_value": hit_rate_test.p_value,
-                "ci_low": hit_rate_test.ci_low,
-                "ci_high": hit_rate_test.ci_high,
-                "notes": hit_rate_test.notes,
-                "decision_implication": hit_rate_decision.rationale,
-                "decision_label": hit_rate_decision.label,
-                "decision_color": hit_rate_decision.color,
-                "decision_severity": hit_rate_decision.severity
-            })
-    
-    # FDR correction for multiple tests
-    p_values = [t.get("p_value") for t in evidence["tests"] if t.get("p_value") is not None]
-    if p_values:
-        q_values = benjamini_hochberg_fdr(p_values, alpha=0.05)
-        evidence["multiple_testing"]["q_values"] = [
-            {
-                "test": evidence["tests"][i].get("name", f"test_{i}"),
-                "q": q,
-                "badge": format_fdr_badge(q)[0],
-                "badge_color": format_fdr_badge(q)[1]
-            }
-            for i, q in enumerate(q_values) if evidence["tests"][i].get("p_value") is not None
-        ]
-    
-    # Calibration metrics (if we have predicted vs actual)
-    # This would require historical LLM confidence vs outcomes - placeholder for now
-    evidence["calibration"]["ece"] = 0.0
-    evidence["calibration"]["brier"] = 0.0
-    
-    return evidence
+        # Calibration metrics (if we have predicted vs actual)
+        # This would require historical LLM confidence vs outcomes - placeholder for now
+        evidence["calibration"]["ece"] = 0.0
+        evidence["calibration"]["brier"] = 0.0
+        
+        return evidence
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        logger.error(f"compute_evidence_analysis error for {ticker}: {e}\n{error_trace}")
+        evidence["assumptions"]["missing"].append(f"evidence_computation_error: {str(e)}")
+        return evidence
 
 
 def compute_room_to_run(
@@ -290,8 +347,25 @@ def compute_room_to_run(
     swing_room_down = max(expected_move_iv * 0.6, distance_to_support)
     
     # Quantile regression for prediction intervals
-    closes = [h["close"] for h in hist]
-    returns = [(closes[i] - closes[i-1]) / closes[i-1] for i in range(1, len(closes))]
+    closes = []
+    for h in hist:
+        c = h.get("close")
+        if isinstance(c, (int, float)):
+            closes.append(float(c))
+        elif isinstance(c, dict):
+            c = c.get("value") or c.get("amount") or c.get("close")
+            if isinstance(c, (int, float)):
+                closes.append(float(c))
+    
+    # Filter out invalid values
+    closes = [c for c in closes if isinstance(c, (int, float)) and c > 0]
+    
+    returns = []
+    for i in range(1, len(closes)):
+        if closes[i-1] > 0:
+            ret = (closes[i] - closes[i-1]) / closes[i-1]
+            if isinstance(ret, (int, float)) and ret == ret:  # Check not NaN
+                returns.append(float(ret))
     
     if len(returns) >= 10:
         quantiles = quantile_regression_room(returns, quantiles=[0.1, 0.5, 0.9])

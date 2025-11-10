@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM v2 Analysis Output</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            line-height: 1.6;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: #252526;
+            padding: 24px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+            border: 1px solid #3e3e42;
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+            color: #ffffff;
+            margin-bottom: 8px;
+        }
+        
+        .header .meta {
+            font-size: 14px;
+            color: #858585;
+        }
+        
+        .search-bar {
+            background: #252526;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+            border: 1px solid #3e3e42;
+            display: flex;
+            gap: 12px;
+        }
+        
+        .search-bar input {
+            flex: 1;
+            padding: 12px 16px;
+            background: #1e1e1e;
+            border: 1px solid #3e3e42;
+            border-radius: 4px;
+            color: #d4d4d4;
+            font-size: 14px;
+            font-family: inherit;
+        }
+        
+        .search-bar input:focus {
+            outline: none;
+            border-color: #007acc;
+        }
+        
+        .search-bar button {
+            padding: 12px 24px;
+            background: #007acc;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .search-bar button:hover {
+            background: #005a9e;
+        }
+        
+        .output-container {
+            background: #252526;
+            border-radius: 8px;
+            padding: 24px;
+            border: 1px solid #3e3e42;
+            overflow-x: auto;
+        }
+        
+        .output-section {
+            margin-bottom: 32px;
+        }
+        
+        .output-section:last-child {
+            margin-bottom: 0;
+        }
+        
+        .section-header {
+            font-size: 16px;
+            font-weight: 600;
+            color: #4ec9b0;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #3e3e42;
+        }
+        
+        .json-content {
+            background: #1e1e1e;
+            padding: 16px;
+            border-radius: 4px;
+            border: 1px solid #3e3e42;
+            overflow-x: auto;
+            font-size: 13px;
+            line-height: 1.8;
+        }
+        
+        .json-key {
+            color: #9cdcfe;
+        }
+        
+        .json-string {
+            color: #ce9178;
+        }
+        
+        .json-number {
+            color: #b5cea8;
+        }
+        
+        .json-boolean {
+            color: #569cd6;
+        }
+        
+        .json-null {
+            color: #569cd6;
+        }
+        
+        .json-bracket {
+            color: #d4d4d4;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 60px;
+            color: #858585;
+        }
+        
+        .spinner {
+            border: 3px solid #3e3e42;
+            border-top: 3px solid #007acc;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 80px 20px;
+            color: #858585;
+        }
+        
+        .empty-state-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+        }
+        
+        .empty-state-title {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #d4d4d4;
+        }
+        
+        .error-state {
+            background: #3a1f1f;
+            border: 1px solid #a1260d;
+            border-radius: 8px;
+            padding: 24px;
+            color: #f48771;
+        }
+        
+        .error-state strong {
+            color: #ff6b6b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>LLM v2 Analysis Output</h1>
+            <div class="meta">Raw LLM v2 prompt results displayed as-is</div>
+        </div>
+        
+        <div class="search-bar">
+            <input type="text" id="ticker-input" placeholder="Enter ticker symbol (e.g., AAPL, NVDA, TSLA)" 
+                   onkeypress="if(event.key==='Enter') analyzeStock()">
+            <button onclick="analyzeStock()">Analyze</button>
+        </div>
+        
+        <div id="dashboard-content">
+            <div class="empty-state">
+                <div class="empty-state-icon">📊</div>
+                <div class="empty-state-title">Ready to Analyze</div>
+                <div class="empty-state-text">Enter a ticker symbol above to view LLM v2 analysis output.</div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Detect API base URL
+        let API_BASE;
+        if (window.location.protocol === 'file:' || window.location.hostname === '') {
+            API_BASE = window.API_BASE_URL || 'http://127.0.0.1:8000';
+        } else {
+            API_BASE = window.API_BASE_URL || window.location.origin;
+        }
+        
+        function syntaxHighlight(json) {
+            if (typeof json !== 'string') {
+                json = JSON.stringify(json, null, 2);
+            }
+            
+            json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            
+            return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+                let cls = 'json-number';
+                if (/^"/.test(match)) {
+                    if (/:$/.test(match)) {
+                        cls = 'json-key';
+                    } else {
+                        cls = 'json-string';
+                    }
+                } else if (/true|false/.test(match)) {
+                    cls = 'json-boolean';
+                } else if (/null/.test(match)) {
+                    cls = 'json-null';
+                }
+                return '<span class="' + cls + '">' + match + '</span>';
+            });
+        }
+        
+        function formatJSON(obj, indent = 0) {
+            const indentStr = '  '.repeat(indent);
+            if (obj === null) {
+                return '<span class="json-null">null</span>';
+            }
+            if (typeof obj === 'string') {
+                return '<span class="json-string">"' + obj.replace(/"/g, '&quot;') + '"</span>';
+            }
+            if (typeof obj === 'number') {
+                return '<span class="json-number">' + obj + '</span>';
+            }
+            if (typeof obj === 'boolean') {
+                return '<span class="json-boolean">' + obj + '</span>';
+            }
+            if (Array.isArray(obj)) {
+                if (obj.length === 0) {
+                    return '<span class="json-bracket">[]</span>';
+                }
+                let html = '<span class="json-bracket">[</span><br>';
+                obj.forEach((item, index) => {
+                    html += indentStr + '  ' + formatJSON(item, indent + 1);
+                    if (index < obj.length - 1) {
+                        html += '<span class="json-bracket">,</span>';
+                    }
+                    html += '<br>';
+                });
+                html += indentStr + '<span class="json-bracket">]</span>';
+                return html;
+            }
+            if (typeof obj === 'object') {
+                const keys = Object.keys(obj);
+                if (keys.length === 0) {
+                    return '<span class="json-bracket">{}</span>';
+                }
+                let html = '<span class="json-bracket">{</span><br>';
+                keys.forEach((key, index) => {
+                    html += indentStr + '  <span class="json-key">"' + key + '"</span><span class="json-bracket">: </span>';
+                    html += formatJSON(obj[key], indent + 1);
+                    if (index < keys.length - 1) {
+                        html += '<span class="json-bracket">,</span>';
+                    }
+                    html += '<br>';
+                });
+                html += indentStr + '<span class="json-bracket">}</span>';
+                return html;
+            }
+            return String(obj);
+        }
+        
+        async function analyzeStock() {
+            const ticker = document.getElementById('ticker-input').value.trim().toUpperCase();
+            if (!ticker) {
+                alert('Please enter a ticker symbol');
+                return;
+            }
+            
+            const content = document.getElementById('dashboard-content');
+            content.innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <div>Analyzing ${ticker}...</div>
+                </div>
+            `;
+            
+            try {
+                const response = await fetch(`${API_BASE}/decision/propose`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ticker: ticker,
+                        price: 0,
+                        spread: 0.01,
+                        liquidity: 1000000000,
+                        event_type: 'EARNINGS',
+                        days_to_event: 7,
+                        expected_move: 4.0,
+                        volume_surge_ratio: 1.5,
+                        recent_high: 0,
+                        recent_low: 0,
+                        price_position: 0.5,
+                        rolling_volatility_10d: 0.20,
+                        context: [0.6, 0.7, 0.5, 0.8],
+                        rank_components: {},
+                        backtest_kpis: {},
+                        decision_id: `llm_v2_${Date.now()}`
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`API error: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                renderLLMOutput(data, ticker);
+            } catch (error) {
+                let errorMsg = error.message;
+                let helpText = '';
+                
+                if (error.message.includes('NetworkError') || error.message.includes('Failed to fetch') || 
+                    error.message.includes('CORS') || error.name === 'TypeError') {
+                    errorMsg = 'Network Error: Cannot connect to API server';
+                    helpText = `
+                        <div style="margin-top: 16px; padding: 16px; background: #2d2d30; border-radius: 4px; font-size: 14px; color: #858585;">
+                            <strong>⚠️ CORS Issue Detected</strong><br>
+                            If you opened this file directly (file://), browsers block fetch requests.<br><br>
+                            <strong>Solution:</strong> Access this report via:<br>
+                            <code style="background: #1e1e1e; padding: 4px 8px; border-radius: 4px; display: inline-block; margin-top: 8px; color: #4ec9b0;">
+                                http://127.0.0.1:8000/executive-report
+                            </code>
+                        </div>
+                    `;
+                }
+                
+                content.innerHTML = `
+                    <div class="error-state">
+                        <strong>Error</strong><br>
+                        ${errorMsg}
+                        ${helpText}
+                    </div>
+                `;
+            }
+        }
+        
+        function renderLLMOutput(data, ticker) {
+            const analysis = data.analysis || {};
+            const llm_v2 = analysis.llm_v2 || {};
+            
+            if (!llm_v2 || Object.keys(llm_v2).length === 0) {
+                const content = document.getElementById('dashboard-content');
+                content.innerHTML = `
+                    <div class="error-state">
+                        <strong>No LLM v2 Output Available</strong><br>
+                        The analysis did not return LLM v2 data. Check the API response or ensure LLM v2 is enabled.
+                        <div style="margin-top: 16px; padding: 16px; background: #1e1e1e; border-radius: 4px;">
+                            <div class="section-header">Full API Response</div>
+                            <div class="json-content">${syntaxHighlight(JSON.stringify(data, null, 2))}</div>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+            
+            const content = document.getElementById('dashboard-content');
+            
+            // Group LLM v2 output into logical sections
+            const sections = {
+                'Core Verdicts': {
+                    schema: llm_v2.schema,
+                    verdict_intraday: llm_v2.verdict_intraday,
+                    verdict_swing_1to5d: llm_v2.verdict_swing_1to5d,
+                    confidence: llm_v2.confidence
+                },
+                'Room Analysis': llm_v2.room,
+                'Pattern Analysis': llm_v2.pattern,
+                'Participation Analysis': llm_v2.participation,
+                'Catalyst Alignment': llm_v2.catalyst_alignment,
+                'Meme/Social Analysis': llm_v2.meme_social,
+                'Trade Plan': llm_v2.plan,
+                'Risk Assessment': llm_v2.risk,
+                'Statistical Analysis': llm_v2.statistical_analysis,
+                'Evidence': llm_v2.evidence,
+                'Evidence Fields': llm_v2.evidence_fields,
+                'Missing Fields': llm_v2.missing_fields,
+                'Assumptions': llm_v2.assumptions,
+                'Plotly Figure': llm_v2.plotly_figure
+            };
+            
+            // Add raw response section if available
+            if (llm_v2._raw_response) {
+                sections['Raw LLM Response'] = {
+                    length: llm_v2._raw_response_length,
+                    response: llm_v2._raw_response
+                };
+            }
+            
+            let html = '<div class="output-container">';
+            html += `<div style="margin-bottom: 24px; padding: 16px; background: #1e1e1e; border-radius: 4px; border: 1px solid #3e3e42;">`;
+            html += `<div style="font-size: 18px; font-weight: 600; color: #ffffff; margin-bottom: 8px;">${ticker} - LLM v2 Analysis</div>`;
+            html += `<div style="font-size: 12px; color: #858585;">Generated at: ${new Date().toLocaleString()}</div>`;
+            html += `</div>`;
+            
+            // Show detailed explanations prominently at the top
+            if (llm_v2.plan && llm_v2.plan.rationale) {
+                html += '<div class="output-section" style="border-left: 4px solid #4ec9b0;">';
+                html += '<div class="section-header">📊 Detailed Analysis & Rationale</div>';
+                html += '<div style="padding: 20px; background: #1e1e1e; border-radius: 4px; font-size: 14px; line-height: 1.8; color: #d4d4d4; white-space: pre-wrap;">';
+                html += llm_v2.plan.rationale.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                html += '</div>';
+                html += '</div>';
+            }
+            
+            // Show other key explanations
+            const keyExplanations = [];
+            if (llm_v2.room && llm_v2.room.explain) keyExplanations.push({title: 'Room Analysis', text: llm_v2.room.explain});
+            if (llm_v2.participation && llm_v2.participation.explain) keyExplanations.push({title: 'Participation Analysis', text: llm_v2.participation.explain});
+            if (llm_v2.catalyst_alignment && llm_v2.catalyst_alignment.explain) keyExplanations.push({title: 'Catalyst Alignment', text: llm_v2.catalyst_alignment.explain});
+            if (llm_v2.meme_social && llm_v2.meme_social.explain) keyExplanations.push({title: 'Social/Meme Analysis', text: llm_v2.meme_social.explain});
+            if (llm_v2.statistical_analysis && llm_v2.statistical_analysis.significance && llm_v2.statistical_analysis.significance.interpretation) {
+                keyExplanations.push({title: 'Statistical Significance', text: llm_v2.statistical_analysis.significance.interpretation});
+            }
+            
+            if (keyExplanations.length > 0) {
+                html += '<div class="output-section">';
+                html += '<div class="section-header">📝 Key Explanations</div>';
+                keyExplanations.forEach(exp => {
+                    html += `<div style="margin-bottom: 16px; padding: 16px; background: #1e1e1e; border-radius: 4px; border-left: 3px solid #4ec9b0;">`;
+                    html += `<div style="font-size: 13px; font-weight: 600; color: #4ec9b0; margin-bottom: 8px;">${exp.title}</div>`;
+                    html += `<div style="font-size: 13px; line-height: 1.7; color: #d4d4d4; white-space: pre-wrap;">${exp.text.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>`;
+                    html += `</div>`;
+                });
+                html += '</div>';
+            }
+            
+            // Render each section
+            Object.entries(sections).forEach(([sectionName, sectionData]) => {
+                if (sectionData === null || sectionData === undefined) {
+                    return;
+                }
+                
+                // Skip empty arrays/objects
+                if (Array.isArray(sectionData) && sectionData.length === 0) {
+                    return;
+                }
+                if (typeof sectionData === 'object' && Object.keys(sectionData).length === 0) {
+                    return;
+                }
+                
+                html += '<div class="output-section">';
+                html += `<div class="section-header">${sectionName}</div>`;
+                html += '<div class="json-content">';
+                
+                // Special handling for raw response
+                if (sectionName === 'Raw LLM Response' && sectionData.response) {
+                    html += `<div style="margin-bottom: 8px; font-size: 11px; color: #858585;">Response length: ${sectionData.length} characters</div>`;
+                    html += `<pre style="background: #1e1e1e; padding: 12px; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; word-wrap: break-word; font-size: 11px; line-height: 1.5;">${sectionData.response.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>`;
+                } else {
+                    html += formatJSON(sectionData, 0);
+                }
+                
+                html += '</div>';
+                html += '</div>';
+            });
+            
+            // Full raw output at the end
+            html += '<div class="output-section">';
+            html += '<div class="section-header">Complete LLM v2 Output (Raw JSON)</div>';
+            html += '<div class="json-content">';
+            html += syntaxHighlight(JSON.stringify(llm_v2, null, 2));
+            html += '</div>';
+            html += '</div>';
+            
+            html += '</div>';
+            
+            content.innerHTML = html;
+        }
+    </script>
+</body>
+</html>

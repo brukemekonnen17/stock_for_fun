@@ -4,6 +4,8 @@ LLM_SYSTEM = (
     
     "CRITICAL: Return ONLY valid JSON matching the EXACT structure below. No markdown, no prose, no explanations outside JSON.\n"
     "If any required field is missing from the input data, set `action='SKIP'` and include `missing_fields: ['field1', 'field2']` in your response.\n"
+    "IMPORTANT: Even when action='SKIP', you MUST still provide ALL required fields: entry_type, entry_price, stop_price, target_price, timeout_days, confidence, and reason.\n"
+    "For SKIP actions, use safe default values: entry_price = price * 0.995, stop_price = price * 0.98, target_price = price * 1.03, timeout_days = 5, confidence = 0.5.\n"
     "You MUST cite which input fields drove each claim using `evidence_fields: ['field1', 'field2']` in your reasoning.\n\n"
     
     "ADVERSARIAL GUARD:\n"
@@ -43,7 +45,7 @@ LLM_SYSTEM = (
     "   - Volume surge with p>0.05: Weak evidence → Require pattern confirmation\n"
     "   - Hit rate 0%: No historical success → SKIP or very low confidence\n"
     "\n"
-    "CRITICAL: Return ONLY valid JSON matching this EXACT structure:\n"
+    "CRITICAL: Return ONLY valid JSON matching this EXACT structure (ALL fields are REQUIRED, even when action='SKIP'):\n"
     "{\n"
     '  "ticker": "XXXX",\n'
     '  "action": "BUY" or "SELL" or "SKIP",\n'
@@ -54,7 +56,9 @@ LLM_SYSTEM = (
     '  "timeout_days": 5,\n'
     '  "confidence": 0.75,\n'
     '  "reason": "DETAILED TRADER ANALYSIS: [Pattern name] detected at [price level]. Entry at [level] with stop at [level] targets [level]. Volume [confirming/diverging]. Statistical evidence [supporting/weak]. Risk/Reward [ratio]. Specific action plan."\n'
-    "}\n\n"
+    '  "missing_fields": []  // Optional: list missing input fields if any\n'
+    "}\n"
+    "REQUIRED: You MUST always include ALL 9 fields above, even when action='SKIP'. Missing any field will cause the response to be rejected.\n\n"
     "RULES:\n"
     "- ALWAYS mention the specific pattern detected (e.g., 'ABCD Bullish pattern at D point $45.20')\n"
     "- ALWAYS explain WHY the pattern suggests the action (e.g., 'Double top at $50 suggests resistance, entry on breakdown')\n"
@@ -63,7 +67,8 @@ LLM_SYSTEM = (
     "- Use ONLY numbers from the input data provided\n"
     "- For low-cap stocks, combine pattern + social sentiment + volume\n"
     "- If pattern conflicts with stats, explain the conflict and prioritize pattern\n"
-    "- If data is insufficient or risks outweigh rewards, use action='SKIP' with clear reason\n"
+    "- If data is insufficient or risks outweigh rewards, use action='SKIP' with clear reason, but STILL provide all required fields (entry_price, stop_price, target_price, etc.) with safe defaults\n"
+    "- NEVER omit required fields, even when skipping the trade\n"
     "- Return ONLY the JSON object, no markdown, no explanation"
 )
 

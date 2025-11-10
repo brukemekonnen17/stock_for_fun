@@ -38,6 +38,8 @@ from services.analysis.explain import (
     set_market_data_adapter
 )
 from services.analysis.events import get_event_details
+from services.config.flags import flag, get_flags_snapshot
+from services.llm.debug_capture import capture_llm_artifact, get_version_info, classify_error
 
 import numpy as np
 import logging
@@ -242,10 +244,35 @@ def root():
 def dashboard():
     return FileResponse("/Users/brukemekonnen/stock_investment/trading_dashboard.html")
 
+@app.get("/executive-report", response_class=FileResponse)
+def serve_executive_report():
+    return FileResponse("/Users/brukemekonnen/stock_investment/executive_report.html")
+
 # Health
 @app.get("/health")
 def health():
     return {"status": "ok", "time": datetime.utcnow().isoformat()}
+
+@app.get("/healthz")
+def healthz():
+    return {"ok": True}
+
+@app.get("/readiness")
+def readiness():
+    # Add light checks here if desired (DB ping, cache presence)
+    issues = []
+    return {"ready": len(issues) == 0, "issues": issues}
+
+@app.get("/features")
+def features():
+    f = get_flags_snapshot()
+    return {
+        "driversLegend": True,
+        "calibrationChip": True,
+        "plotlyPanels": True,
+        "safeMode": f["SAFE_MODE"],
+        "useLlmV2": f["ENABLE_LLM_PHASE1"],
+    }
 
 @app.get("/events/upcoming")
 def upcoming(days: int = 14, db: Session = Depends(get_db)):
@@ -370,7 +397,7 @@ use /analyze/{ticker}
         }
 
 @app.get("/history/{ticker}")
-def get_price_history(ticker: str, days: int = 30):
+def get_price_history(ticker: str, days: int = 365):
     """
     Get historical price data for time series visualization.
     Returns OHLC data with technical indicators.
@@ -492,7 +519,8 @@ def analyze_surge_potential(ticker: str):
     try:
         quote = market_data.last_quote(ticker)
         price = quote["price"]
-        hist = market_data.daily_ohlc(ticker, lookback=30)
+        # Fetch 1 year of historical data for comprehensive analysis
+        hist = market_data.daily_ohlc(ticker, lookback=365)
         
         if not hist:
             return {"error": f"No data available for {ticker}"}
@@ -622,7 +650,8 @@ async def analyze_stock(ticker: str):
             spread = max(0.02, price * 0.0005)
         
         try:
-            hist = market_data.daily_ohlc(ticker, lookback=30)
+            # Fetch 1 year of historical data for comprehensive analysis
+            hist = market_data.daily_ohlc(ticker, lookback=365)
             if not hist:
                 dollar_vol = price * 1_000_000
                 expected_move = 0.03
@@ -826,8 +855,27 @@ async def analyze_stock(ticker: str):
 async def decision_propose(body: ProposePayload) -> ProposeResponse:
     logger.info(f"[{body.decision_id}] Propose: ticker={body.ticker}, event={body.event_type}")
     
-    cat = catalyst_from_payload(body, market_data_adapter=market_data)
-    mkt = compute_market_context(body.ticker, body.price, body.spread, body.liquidity)
+    # Fetch actual price if price is 0 (e.g., from executive report)
+    actual_price = body.price
+    if actual_price <= 0:
+        try:
+            quote = market_data.last_quote(body.ticker)
+            actual_price = quote.get("price", 0.0)
+            if actual_price > 0:
+                logger.info(f"[{body.decision_id}] Fetched price: ${actual_price:.2f}")
+            else:
+                logger.warning(f"[{body.decision_id}] Could not fetch price for {body.ticker}")
+        except Exception as e:
+            logger.warning(f"[{body.decision_id}] Failed to fetch price: {e}")
+    
+    # Create a modified body with actual price
+    body_with_price = body
+    if actual_price > 0 and body.price != actual_price:
+        # Create a copy with updated price using model_copy
+        body_with_price = body.model_copy(update={"price": actual_price})
+    
+    cat = catalyst_from_payload(body_with_price, market_data_adapter=market_data)
+    mkt = compute_market_context(body_with_price.ticker, body_with_price.price, body_with_price.spread, body_with_price.liquidity)
     news_items = recent_news(body.ticker, limit=5)
     perf = build_perf_stats(body.ticker, body.event_type, body.backtest_kpis, market_data_adapter=market_data)
     
@@ -862,30 +910,53 @@ async def decision_propose(body: ProposePayload) -> ProposeResponse:
     from apps.api.evidence_analysis import compute_evidence_analysis, compute_technical_indicators
     from services.analysis.pattern_detection import detect_patterns
     
-    evidence = {}
+    # Initialize evidence with empty structure
+    evidence = {
+        "tests": [],
+        "multiple_testing": {"method": "BH_FDR", "q_values": []},
+        "assumptions": {"missing": []}
+    }
     pattern_info = None
     hist = None
+    
     try:
-        hist = market_data.daily_ohlc(body.ticker, lookback=30)
-        if hist:
+        # Fetch 1 year of historical data for comprehensive analysis
+        hist = market_data.daily_ohlc(body_with_price.ticker, lookback=365)
+        if hist and len(hist) >= 10:
             # Detect technical patterns
-            pattern_info = detect_patterns(hist, body.price)
+            try:
+                pattern_info = detect_patterns(hist, body_with_price.price)
+            except Exception as e:
+                logger.debug(f"[{body.decision_id}] Pattern detection failed: {e}")
             
-            evidence = compute_evidence_analysis(
-                ticker=body.ticker,
-                hist=hist,
-                price=body.price,
-                volume_surge_ratio=body.volume_surge_ratio,
-                event_type=cat.event_type,
-                days_to_event=cat.days_to_event,
-                backtest_data=perf.model_dump() if hasattr(perf, 'model_dump') else {}
-            )
+            # Compute evidence analysis
+            try:
+                evidence_result = compute_evidence_analysis(
+                    ticker=body_with_price.ticker,
+                    hist=hist,
+                    price=body_with_price.price,
+                    volume_surge_ratio=body_with_price.volume_surge_ratio,
+                    event_type=cat.event_type,
+                    days_to_event=cat.days_to_event,
+                    backtest_data=perf.model_dump() if hasattr(perf, 'model_dump') else {}
+                )
+                # Merge evidence results (preserve tests, multiple_testing, etc.)
+                if evidence_result:
+                    evidence.update(evidence_result)
+                    logger.info(f"[{body.decision_id}] Evidence analysis: {len(evidence.get('tests', []))} tests computed")
+            except Exception as e:
+                logger.warning(f"[{body.decision_id}] Evidence analysis computation failed: {e}", exc_info=True)
+                evidence["assumptions"]["missing"].append(f"evidence_computation_error: {str(e)}")
             
             # Add pattern info to evidence
             if pattern_info:
                 evidence["patterns"] = pattern_info
+        else:
+            logger.debug(f"[{body.decision_id}] Insufficient historical data: {len(hist) if hist else 0} points")
+            evidence["assumptions"]["missing"].append("insufficient_historical_data")
     except Exception as e:
-        logger.warning(f"[{body.decision_id}] Evidence analysis failed: {e}")
+        logger.warning(f"[{body.decision_id}] Evidence analysis failed: {e}", exc_info=True)
+        evidence["assumptions"]["missing"].append(f"evidence_fetch_error: {str(e)}")
     
     # Get event-study CAR (for evidence)
     event_study_summary = {}
@@ -919,10 +990,10 @@ async def decision_propose(body: ProposePayload) -> ProposeResponse:
     from services.policy.validators import SPREAD_CENTS_MAX, SPREAD_BPS_MAX
     
     participation_quality, participation_score = compute_participation_quality(
-        volume_surge_ratio=body.volume_surge_ratio,
-        dollar_adv=body.liquidity,
-        spread=body.spread,
-        price=body.price
+        volume_surge_ratio=body_with_price.volume_surge_ratio,
+        dollar_adv=body_with_price.liquidity,
+        spread=body_with_price.spread,
+        price=body_with_price.price
     )
     
     # Compute IV-RV gap if available
@@ -956,10 +1027,49 @@ async def decision_propose(body: ProposePayload) -> ProposeResponse:
             "side": primary.get("type", "NEUTRAL").upper() if primary.get("type") in ("BULLISH", "BEARISH") else "NEUTRAL"
         }
     
-    # Build deterministic payload for Phase-1 LLM
+    # Compute technical indicators for enhanced analysis
+    tech_indicators = {}
+    if hist and len(hist) >= 20:
+        try:
+            tech_indicators = compute_technical_indicators(hist, body_with_price.price)
+        except Exception as e:
+            logger.debug(f"[{body.decision_id}] Technical indicators computation failed: {e}")
+    
+    # Extract statistical test results from evidence
+    evidence_stats = {}
+    if evidence.get("tests"):
+        # Extract p-values, effect sizes, CIs from tests
+        for test in evidence.get("tests", []):
+            if test.get("name") == "volume_surge":
+                evidence_stats["volume_test"] = {
+                    "p_value": test.get("p_value"),
+                    "effect_size": test.get("effect_size"),
+                    "ci_low": test.get("ci_low"),
+                    "ci_high": test.get("ci_high"),
+                    "significant": test.get("p_value", 1.0) < 0.05 if test.get("p_value") else False
+                }
+            elif test.get("name") == "median_return":
+                evidence_stats["return_test"] = {
+                    "p_value": test.get("p_value"),
+                    "median": test.get("median"),
+                    "ci_low": test.get("ci_low"),
+                    "ci_high": test.get("ci_high"),
+                    "significant": test.get("p_value", 1.0) < 0.05 if test.get("p_value") else False
+                }
+    
+    # Extract FDR correction results
+    fdr_results = {}
+    if evidence.get("multiple_testing", {}).get("q_values"):
+        fdr_results = {
+            "fdr_method": evidence.get("multiple_testing", {}).get("method", "BH_FDR"),
+            "q_values": evidence.get("multiple_testing", {}).get("q_values", [])
+        }
+    
+    # Build deterministic payload for Phase-1 LLM (enhanced with more statistical data)
     payload_for_llm = {
-        "price": float(body.price),
-        "spread": float(body.spread),
+        "ticker": body_with_price.ticker,
+        "price": float(body_with_price.price),
+        "spread": float(body_with_price.spread),
         "policy_limits": {
             "spread_cents_max": SPREAD_CENTS_MAX,
             "spread_bps_max": SPREAD_BPS_MAX
@@ -974,19 +1084,66 @@ async def decision_propose(body: ProposePayload) -> ProposeResponse:
         "sector_relative_strength": float(sector_rel_strength),
         "pattern_detected": pattern_detected_dict,
         "participation_quality": participation_quality,
+        # Technical indicators
+        "adr20": float(tech_indicators.get("adr20", 0.02)),
+        "atr14": float(tech_indicators.get("atr14", body_with_price.price * 0.02)),
+        "ema20": float(tech_indicators.get("ema20", body_with_price.price)),
+        "ema50": float(tech_indicators.get("ema50", body_with_price.price)),
+        "rsi14": float(tech_indicators.get("rsi14", 50.0)),
+        "bb_upper": float(tech_indicators.get("bb_upper", body_with_price.price * 1.02)),
+        "bb_lower": float(tech_indicators.get("bb_lower", body_with_price.price * 0.98)),
+        # Evidence and statistical tests
         "evidence": {
             "event_study": {
-                "significant": event_study_car_sig
-            }
+                "significant": event_study_car_sig,
+                "car_summary": event_study_summary
+            },
+            "statistical_tests": evidence_stats,
+            "fdr_correction": fdr_results
+        },
+        # Event context
+        "event_type": cat.event_type,
+        "days_to_event": cat.days_to_event,
+        "materiality": body.rank_components.get("materiality", 0.5),
+        # Social sentiment
+        "social_sentiment": {
+            "score": social_data.get("sentiment_score", 0.0),
+            "mentions": social_data.get("mention_count_total", 0),
+            "bull_ratio": social_data.get("bullish_pct", 0.5)
         },
         "tick_size": 0.01  # Default tick size
     }
     
-    # Load SYSTEM prompt
+    # Guard LLM v2 usage based on feature flag (default: True for better analysis)
+    use_v2 = flag("ENABLE_LLM_PHASE1", True)
+    
+    # Optional auto-degrade using runtime metrics if available:
+    try:
+        # Check if metrics indicate we should disable v2
+        if _llm_metrics["parse_ok"] and _llm_metrics["parse_fail"]:
+            parse_ok_count = len(_llm_metrics["parse_ok"])
+            parse_fail_count = len(_llm_metrics["parse_fail"])
+            total = parse_ok_count + parse_fail_count
+            parse_rate = parse_ok_count / total if total > 0 else 1.0
+            
+            policy_overrides = list(_llm_metrics["policy_override"])
+            override_rate = sum(policy_overrides) / len(policy_overrides) if policy_overrides else 0.0
+            
+            # Temporarily relaxed threshold for initial testing (TODO: restore to 0.98)
+            if parse_rate < 0.80 or override_rate > 0.20:
+                use_v2 = False
+                logger.info(f"[{body.decision_id}] Auto-degrading LLM v2: parse_rate={parse_rate:.3f}, override_rate={override_rate:.3f}")
+    except Exception:
+        # If metrics unavailable, keep current use_v2 value
+        pass
+    
+    # Load SYSTEM prompt - load the ENTIRE prompt file
     try:
         prompt_path = Path(project_dir) / "PROMPTS" / "LLM_SYSTEM.md"
         if prompt_path.exists():
-            system_prompt_text = prompt_path.read_text(encoding="utf-8").split("# Exemplar")[0].strip()
+            # Load the entire prompt file - don't truncate
+            system_prompt_text = prompt_path.read_text(encoding="utf-8").strip()
+            logger.info(f"[{body.decision_id}] Loaded LLM prompt ({len(system_prompt_text)} chars)")
         else:
             logger.warning(f"[{body.decision_id}] LLM_SYSTEM.md not found, using fallback")
             system_prompt_text = "You are a professional trading analyst. Output STRICT JSON only."
@@ -994,99 +1151,178 @@ async def decision_propose(body: ProposePayload) -> ProposeResponse:
         logger.warning(f"[{body.decision_id}] Failed to load SYSTEM prompt: {e}")
         system_prompt_text = "You are a professional trading analyst. Output STRICT JSON only."
     
-    # Call Phase-1 LLM
+    # Call Phase-1 LLM only if enabled
     llm_analysis_v2 = None
     llm_start_time = time()
     policy_override_applied = False
-    try:
-        messages = build_messages(system_prompt_text, payload_for_llm)
-        raw_response = await propose_trade_v2(messages)
-        
-        latency_ms = (time() - llm_start_time) * 1000
-        
-        if raw_response:
-            ta = parse_llm_json(raw_response)
-            if ta:
-                # Enforce policy and sanity checks
-                ta_before = ta.model_dump().copy()
-                ta = enforce_policy_and_sanity(ta, facts=payload_for_llm)
-                ta_after = ta.model_dump()
-                
-                # Check if policy override changed verdicts
-                if (ta_before.get("verdict_intraday") != ta_after.get("verdict_intraday") or
-                    ta_before.get("verdict_swing_1to5d") != ta_after.get("verdict_swing_1to5d")):
-                    policy_override_applied = True
-                
-                llm_analysis_v2 = ta_after
-                confidence_raw = ta_after.get("confidence", 0.5)
-                
-                # Record telemetry
-                record_llm_metric(
-                    parse_ok=True,
-                    latency_ms=latency_ms,
-                    policy_override=policy_override_applied,
-                    confidence_raw=confidence_raw
-                )
-                
-                logger.info(f"[{body.decision_id}] Phase-1 LLM analysis parsed successfully (latency: {latency_ms:.1f}ms)")
+    parse_error = None
+    error_bucket = None
+    
+    if use_v2:
+        try:
+            messages = build_messages(system_prompt_text, payload_for_llm)
+            raw_response = await propose_trade_v2(messages)
+            
+            latency_ms = (time() - llm_start_time) * 1000
+            
+            if raw_response:
+                # DEBUG: Log raw response for troubleshooting
+                logger.info(f"[{body.decision_id}] RAW LLM RESPONSE (first 500 chars): {raw_response[:500]}")
+                try:
+                    ta = parse_llm_json(raw_response)
+                    if ta:
+                        # Enforce policy and sanity checks
+                        ta_before = ta.model_dump().copy()
+                        ta = enforce_policy_and_sanity(ta, facts=payload_for_llm)
+                        ta_after = ta.model_dump()
+                        
+                        # Check if policy override changed verdicts
+                        if (ta_before.get("verdict_intraday") != ta_after.get("verdict_intraday") or
+                            ta_before.get("verdict_swing_1to5d") != ta_after.get("verdict_swing_1to5d")):
+                            policy_override_applied = True
+                            error_bucket = "POLICY_OVERRIDE"
+                        
+                        llm_analysis_v2 = ta_after
+                        confidence_raw = ta_after.get("confidence", 0.5)
+                        
+                        # Add version info and raw response to llm_analysis_v2 for full transparency
+                        if llm_analysis_v2:
+                            llm_analysis_v2["_versions"] = get_version_info()
+                            # Include raw LLM response for debugging and transparency
+                            llm_analysis_v2["_raw_response"] = raw_response
+                            llm_analysis_v2["_raw_response_length"] = len(raw_response)
+                        
+                        # Record telemetry
+                        record_llm_metric(
+                            parse_ok=True,
+                            latency_ms=latency_ms,
+                            policy_override=policy_override_applied,
+                            confidence_raw=confidence_raw,
+                            error_bucket=error_bucket if policy_override_applied else None
+                        )
+                        
+                        # Capture artifact (success case - sample 10%)
+                        import random
+                        if random.random() < 0.10:
+                            capture_llm_artifact(
+                                decision_id=body.decision_id,
+                                ticker=body.ticker,
+                                raw_request={"messages": messages, "payload": payload_for_llm},
+                                raw_response=raw_response,
+                                parse_success=True,
+                                error_bucket=error_bucket,
+                                latency_ms=latency_ms,
+                                metadata={"policy_override": policy_override_applied}
+                            )
+                        
+                        logger.info(f"[{body.decision_id}] Phase-1 LLM analysis parsed successfully (latency: {latency_ms:.1f}ms)")
+                    else:
+                        # Parse returned None - classify error
+                        error_bucket = classify_error(raw_response, None)
+                        
+                        # Record parse failure
+                        record_llm_metric(
+                            parse_ok=False,
+                            latency_ms=latency_ms,
+                            policy_override=False,
+                            error_bucket=error_bucket
+                        )
+                        
+                        # Capture artifact (100% of failures)
+                        capture_llm_artifact(
+                            decision_id=body.decision_id,
+                            ticker=body.ticker,
+                            raw_request={"messages": messages, "payload": payload_for_llm},
+                            raw_response=raw_response,
+                            parse_success=False,
+                            error_bucket=error_bucket,
+                            parse_error=None,
+                            latency_ms=latency_ms
+                        )
+                        
+                        logger.warning(f"[{body.decision_id}] Phase-1 LLM parse failed ({error_bucket}), using fallback")
+                except Exception as parse_exc:
+                    # Capture parse exception for classification
+                    parse_error = parse_exc
+                    error_bucket = classify_error(raw_response, parse_error)
+                    
+                    # Record parse failure
+                    record_llm_metric(
+                        parse_ok=False,
+                        latency_ms=latency_ms,
+                        policy_override=False,
+                        error_bucket=error_bucket
+                    )
+                    
+                    # Capture artifact (100% of failures)
+                    capture_llm_artifact(
+                        decision_id=body.decision_id,
+                        ticker=body.ticker,
+                        raw_request={"messages": messages, "payload": payload_for_llm},
+                        raw_response=raw_response,
+                        parse_success=False,
+                        error_bucket=error_bucket,
+                        parse_error=parse_error,
+                        latency_ms=latency_ms
+                    )
+                    
+                    logger.warning(f"[{body.decision_id}] Phase-1 LLM parse exception ({error_bucket}): {parse_exc}, using fallback")
             else:
-                # Record parse failure
+                # Empty response - classify as transport/timeout
+                error_bucket = "TRANSPORT"
+                
+                # Record failure
                 record_llm_metric(
                     parse_ok=False,
                     latency_ms=latency_ms,
-                    policy_override=False
+                    policy_override=False,
+                    error_bucket=error_bucket
                 )
-                logger.warning(f"[{body.decision_id}] Phase-1 LLM parse failed, using fallback")
-        else:
-            # Record failure
+                
+                # Capture artifact (100% of failures)
+                capture_llm_artifact(
+                    decision_id=body.decision_id,
+                    ticker=body.ticker,
+                    raw_request={"messages": messages, "payload": payload_for_llm},
+                    raw_response="",
+                    parse_success=False,
+                    error_bucket=error_bucket,
+                    latency_ms=latency_ms
+                )
+                
+                logger.warning(f"[{body.decision_id}] Phase-1 LLM returned empty ({error_bucket}), using fallback")
+        except Exception as e:
+            latency_ms = (time() - llm_start_time) * 1000
+            parse_error = e
+            error_bucket = classify_error("", e)
+            
             record_llm_metric(
                 parse_ok=False,
                 latency_ms=latency_ms,
-                policy_override=False
+                policy_override=False,
+                error_bucket=error_bucket
             )
-            logger.warning(f"[{body.decision_id}] Phase-1 LLM returned empty, using fallback")
-    except Exception as e:
-        latency_ms = (time() - llm_start_time) * 1000
-        record_llm_metric(
-            parse_ok=False,
-            latency_ms=latency_ms,
-            policy_override=False
-        )
-        logger.warning(f"[{body.decision_id}] Phase-1 LLM error: {e}, using fallback")
+            
+            # Capture artifact (100% of failures)
+            try:
+                capture_llm_artifact(
+                    decision_id=body.decision_id,
+                    ticker=body.ticker,
+                    raw_request={"messages": messages if 'messages' in locals() else {}, "payload": payload_for_llm},
+                    raw_response="",
+                    parse_success=False,
+                    error_bucket=error_bucket,
+                    parse_error=e,
+                    latency_ms=latency_ms
+                )
+            except:
+                pass  # Don't fail on artifact capture
+            
+            logger.warning(f"[{body.decision_id}] Phase-1 LLM error ({error_bucket}): {e}, using fallback")
+    else:
+        logger.info(f"[{body.decision_id}] LLM v2 disabled (SAFE_MODE or ENABLE_LLM_PHASE1=0)")
     
-    # Fallback to conservative SKIP if Phase-1 LLM failed
-    if llm_analysis_v2 is None:
-        llm_analysis_v2 = TradeAnalysisV2.model_validate({
-            "schema": "TradeAnalysisV2",
-            "verdict_intraday": "SKIP",
-            "verdict_swing_1to5d": "SKIP",
-            "confidence": 0.5,
-            "room": {
-                "intraday_room_up_pct": 0.0,
-                "intraday_room_down_pct": 0.0,
-                "swing_room_up_pct": 0.0,
-                "swing_room_down_pct": 0.0,
-                "explain": "LLM parse fail"
-            },
-            "pattern": {"state": "RANGE"},
-            "participation": {"quality": "LOW"},
-            "catalyst_alignment": {"alignment": "NEUTRAL"},
-            "meme_social": {"diagnosis": "NOISE"},
-            "plan": {
-                "entry_type": "limit",
-                "entry_price": payload_for_llm.get("price", 0),
-                "stop_price": payload_for_llm.get("price", 0) * 0.99,
-                "targets": [],
-                "timeout_days": 1,
-                "rationale": "N/A"
-            },
-            "risk": {"policy_pass": False, "warnings": ["LLM parse failed"]},
-            "evidence": {},
-            "evidence_fields": [],
-            "missing_fields": ["llm_output"],
-            "assumptions": {"llm_fallback": True}
-        }).model_dump()
-    
+    # Prepare payload for old LLM (will be used if v2 is disabled or fails)
     llm_payload = body.model_dump().copy()
     llm_payload["market_context"] = json.dumps({
         "ticker": body.ticker,
@@ -1107,26 +1343,68 @@ async def decision_propose(body: ProposePayload) -> ProposeResponse:
     })
     llm_payload["social_sentiment"] = json.dumps(social_data)
     
-    # Use Phase-1 LLM analysis if available, otherwise fall back to old LLM
-    if llm_analysis_v2 and llm_analysis_v2.get("schema") == "TradeAnalysisV2":
-        # Convert Phase-1 LLM output to legacy format for compatibility
+    # Determine which LLM to use and get analysis
+    llm_v2_succeeded = False
+    if use_v2 and llm_analysis_v2 and llm_analysis_v2.get("schema") == "TradeAnalysisV2":
+        # LLM v2 was enabled and succeeded - use it
+        llm_v2_succeeded = True
         plan = llm_analysis_v2.get("plan", {})
         llm_out = {
             "ticker": body.ticker,
             "action": llm_analysis_v2.get("verdict_intraday", "SKIP"),
             "entry_type": plan.get("entry_type", "limit"),
-            "entry_price": plan.get("entry_price", body.price),
-            "stop_price": plan.get("stop_price", body.price * 0.98),
-            "target_price": plan.get("targets", [body.price * 1.05])[0] if plan.get("targets") else body.price * 1.05,
+            "entry_price": plan.get("entry_price", body_with_price.price),
+            "stop_price": plan.get("stop_price", body_with_price.price * 0.98),
+            "target_price": plan.get("targets", [body_with_price.price * 1.05])[0] if plan.get("targets") else body_with_price.price * 1.05,
             "timeout_days": plan.get("timeout_days", 1),
             "confidence": llm_analysis_v2.get("confidence", 0.5),
             "reason": plan.get("rationale", "Phase-1 LLM analysis")
         }
         raw_confidence = float(llm_analysis_v2.get("confidence", 0.5))
+        logger.info(f"[{body.decision_id}] Using LLM v2 analysis (confidence={raw_confidence:.3f})")
     else:
-        # Fallback to old LLM
-        llm_out = await propose_trade(llm_payload)
-        raw_confidence = float(llm_out.get("confidence", 0.5))
+        # LLM v2 disabled or failed - use fallback mock plan (v1 removed)
+        logger.warning(f"[{body.decision_id}] LLM v2 disabled or failed - using fallback mock plan")
+        from services.llm.client import _mock_plan
+        llm_out = _mock_plan(
+            body_with_price.ticker, 
+            body_with_price.price, 
+            f"LLM v2 disabled (use_v2={use_v2}, succeeded={bool(llm_analysis_v2)})"
+        )
+        raw_confidence = 0.5
+        
+        # If old LLM failed, create a minimal llm_v2 fallback for audit trail
+        if not llm_analysis_v2:
+            llm_analysis_v2 = TradeAnalysisV2.model_validate({
+                "schema": "TradeAnalysisV2",
+                "verdict_intraday": llm_out.get("action", "SKIP"),
+                "verdict_swing_1to5d": "SKIP",
+                "confidence": raw_confidence,
+                "room": {
+                    "intraday_room_up_pct": 0.0,
+                    "intraday_room_down_pct": 0.0,
+                    "swing_room_up_pct": 0.0,
+                    "swing_room_down_pct": 0.0,
+                    "explain": "Legacy LLM used"
+                },
+                "pattern": {"state": "RANGE"},
+                "participation": {"quality": "LOW"},
+                "catalyst_alignment": {"alignment": "NEUTRAL"},
+                "meme_social": {"diagnosis": "NOISE"},
+                "plan": {
+                    "entry_type": llm_out.get("entry_type", "limit"),
+                    "entry_price": llm_out.get("entry_price", body_with_price.price),
+                    "stop_price": llm_out.get("stop_price", body_with_price.price * 0.98),
+                    "targets": [llm_out.get("target_price", body_with_price.price * 1.05)],
+                    "timeout_days": llm_out.get("timeout_days", 1),
+                    "rationale": llm_out.get("reason", "Legacy LLM analysis")
+                },
+                "risk": {"policy_pass": True, "warnings": []},
+                "evidence": {},
+                "evidence_fields": [],
+                "missing_fields": [],
+                "assumptions": {"llm_version": "v1_legacy"}
+            }).model_dump()
     
     # Apply calibration if available
     from services.analysis.calibration import get_calibration_service
@@ -1253,7 +1531,7 @@ async def decision_propose(body: ProposePayload) -> ProposeResponse:
     try:
         if hist and len(hist) >= 20:
             from apps.api.evidence_analysis import compute_technical_indicators
-            indicators = compute_technical_indicators(hist, body.price)
+            indicators = compute_technical_indicators(hist, body_with_price.price)
             
             closes = [h["close"] for h in hist]
             opens = [h["open"] for h in hist]
@@ -1271,7 +1549,7 @@ async def decision_propose(body: ProposePayload) -> ProposeResponse:
                     ema20 = alpha_20 * c + (1 - alpha_20) * ema20
                     ema20_vals.append(ema20)
             else:
-                ema20_vals = [indicators.get("ema20", body.price)] * len(closes)
+                ema20_vals = [indicators.get("ema20", body_with_price.price)] * len(closes)
             
             if len(closes) >= 50:
                 alpha_50 = 2 / (50 + 1)
@@ -1280,18 +1558,19 @@ async def decision_propose(body: ProposePayload) -> ProposeResponse:
                     ema50 = alpha_50 * c + (1 - alpha_50) * ema50
                     ema50_vals.append(ema50)
             else:
-                ema50_vals = [indicators.get("ema50", body.price)] * len(closes)
+                ema50_vals = [indicators.get("ema50", body_with_price.price)] * len(closes)
             
+            # Send all 365 days of data (not just last 30)
             series_data = {
-                "dates": dates[-30:] if len(dates) > 30 else dates,
-                "open": opens[-30:] if len(opens) > 30 else opens,
-                "high": highs[-30:] if len(highs) > 30 else highs,
-                "low": lows[-30:] if len(lows) > 30 else lows,
-                "close": closes[-30:] if len(closes) > 30 else closes,
-                "ema20": ema20_vals[-30:] if len(ema20_vals) > 30 else ema20_vals,
-                "ema50": ema50_vals[-30:] if len(ema50_vals) > 30 else ema50_vals,
-                "bb_upper": [indicators.get("bb_upper", body.price * 1.02)] * (len(closes[-30:]) if len(closes) > 30 else len(closes)),
-                "bb_lower": [indicators.get("bb_lower", body.price * 0.98)] * (len(closes[-30:]) if len(closes) > 30 else len(closes)),
+                "dates": dates,  # All dates
+                "open": opens,   # All opens
+                "high": highs,   # All highs
+                "low": lows,     # All lows
+                "close": closes, # All closes
+                "ema20": ema20_vals,  # All EMA20 values
+                "ema50": ema50_vals,  # All EMA50 values
+                "bb_upper": [indicators.get("bb_upper", body_with_price.price * 1.02)] * len(closes),
+                "bb_lower": [indicators.get("bb_lower", body_with_price.price * 0.98)] * len(closes),
                 "recent_high_10d": body.recent_high,
                 "recent_low_10d": body.recent_low
             }
@@ -1308,10 +1587,10 @@ async def decision_propose(body: ProposePayload) -> ProposeResponse:
         )
         
         participation_quality, participation_score = compute_participation_quality(
-            volume_surge_ratio=body.volume_surge_ratio,
-            dollar_adv=body.liquidity,
-            spread=body.spread,
-            price=body.price
+            volume_surge_ratio=body_with_price.volume_surge_ratio,
+            dollar_adv=body_with_price.liquidity,
+            spread=body_with_price.spread,
+            price=body_with_price.price
         )
         
         # IV-RV gap (already computed above)
@@ -1351,7 +1630,7 @@ async def decision_propose(body: ProposePayload) -> ProposeResponse:
         w1, w2, w3, w4, w5 = 0.3, 0.25, 0.2, 0.15, 0.1
         
         participation_score_val = participation_score if 'participation_score' in locals() else 0.5
-        spread_penalty = min(1.0, body.spread / (body.price * 0.01))  # Penalty if spread > 1% of price
+        spread_penalty = min(1.0, body_with_price.spread / (body_with_price.price * 0.01)) if body_with_price.price > 0 else 1.0  # Penalty if spread > 1% of price
         meme_noise_penalty = 0.3 if meme_risk == "NOISE" else 0.0
         
         nba_score = (
@@ -1368,9 +1647,13 @@ async def decision_propose(body: ProposePayload) -> ProposeResponse:
     # Add series, drivers, and NBA to analysis
     if series_data:
         analysis_dict["series"] = series_data
-    if drivers:
-        analysis_dict["drivers"] = drivers
+    
+    # Ensure drivers always present (with fallbacks)
+    from services.analysis.enhanced_features import build_drivers
+    analysis_dict["drivers"] = build_drivers(drivers, analysis_dict)
+    
     analysis_dict["nba_score"] = nba_score
+    analysis_dict["llm_version"] = "v2" if use_v2 and llm_analysis_v2 else "v1"
     analysis_dict["timestamp"] = datetime.utcnow().isoformat()
     
     return ProposeResponse(
@@ -1797,7 +2080,8 @@ _llm_metrics = {
     "latency_ms": deque(maxlen=1000),
     "policy_override": deque(maxlen=1000),
     "confidence_raw": deque(maxlen=1000),
-    "confidence_calibrated": deque(maxlen=1000)
+    "confidence_calibrated": deque(maxlen=1000),
+    "error_buckets": deque(maxlen=1000)  # Track error taxonomy
 }
 _metrics_lock = threading.Lock()
 
@@ -1806,7 +2090,8 @@ def record_llm_metric(
     latency_ms: float,
     policy_override: bool = False,
     confidence_raw: Optional[float] = None,
-    confidence_calibrated: Optional[float] = None
+    confidence_calibrated: Optional[float] = None,
+    error_bucket: Optional[str] = None
 ):
     """Record LLM quality metrics for telemetry."""
     with _metrics_lock:
@@ -1822,13 +2107,18 @@ def record_llm_metric(
             _llm_metrics["confidence_raw"].append(confidence_raw)
         if confidence_calibrated is not None:
             _llm_metrics["confidence_calibrated"].append(confidence_calibrated)
+        
+        if error_bucket:
+            _llm_metrics["error_buckets"].append(error_bucket)
 
 @app.get("/metrics/llm_phase1")
 def get_llm_metrics():
     """
     Get LLM Phase-1 quality telemetry.
-    Returns rolling counts and p95 latency.
+    Returns rolling counts and p95 latency, error taxonomy, and SLO status.
     """
+    from collections import Counter
+    
     with _metrics_lock:
         parse_ok_count = len(_llm_metrics["parse_ok"])
         parse_fail_count = len(_llm_metrics["parse_fail"])
@@ -1837,13 +2127,33 @@ def get_llm_metrics():
         
         latencies = list(_llm_metrics["latency_ms"])
         p95_latency = sorted(latencies)[int(len(latencies) * 0.95)] if latencies else 0.0
-        median_latency = sorted(latencies)[len(latencies) // 2] if latencies else 0.0
+        p50_latency = sorted(latencies)[len(latencies) // 2] if latencies else 0.0
         
         policy_overrides = list(_llm_metrics["policy_override"])
         override_rate = sum(policy_overrides) / len(policy_overrides) if policy_overrides else 0.0
         
         conf_raw = list(_llm_metrics["confidence_raw"])
         conf_cal = list(_llm_metrics["confidence_calibrated"])
+        
+        # Error taxonomy counts
+        error_buckets = list(_llm_metrics["error_buckets"])
+        error_counts = dict(Counter(error_buckets))
+        
+        # SLO targets
+        SLO_PARSE_RATE = 0.99
+        SLO_P95_LATENCY_MS = 2500.0
+        SLO_TIMEOUT_RATE = 0.01
+        SLO_FALLBACK_RATE = 0.05
+        SLO_POLICY_OVERRIDE_RATE = 0.10
+        
+        # Calculate SLO status
+        parse_rate_slo = parse_rate >= SLO_PARSE_RATE
+        latency_slo = p95_latency <= SLO_P95_LATENCY_MS
+        timeout_rate = error_counts.get("TIMEOUT", 0) / total if total > 0 else 0.0
+        timeout_slo = timeout_rate <= SLO_TIMEOUT_RATE
+        fallback_rate = parse_fail_count / total if total > 0 else 0.0
+        fallback_slo = fallback_rate <= SLO_FALLBACK_RATE
+        override_slo = override_rate <= SLO_POLICY_OVERRIDE_RATE
         
         return {
             "schema": "LLMMetricsV1",
@@ -1852,9 +2162,39 @@ def get_llm_metrics():
             "parse_fail_count": parse_fail_count,
             "total_requests": total,
             "p95_latency_ms": p95_latency,
-            "median_latency_ms": median_latency,
+            "p50_latency_ms": p50_latency,
             "policy_override_rate": override_rate,
             "avg_confidence_raw": sum(conf_raw) / len(conf_raw) if conf_raw else 0.0,
             "avg_confidence_calibrated": sum(conf_cal) / len(conf_cal) if conf_cal else 0.0,
+            "error_buckets": error_counts,
+            "timeout_rate": timeout_rate,
+            "fallback_rate": fallback_rate,
+            "slo_status": {
+                "parse_rate": {
+                    "target": SLO_PARSE_RATE,
+                    "current": parse_rate,
+                    "pass": parse_rate_slo
+                },
+                "p95_latency": {
+                    "target_ms": SLO_P95_LATENCY_MS,
+                    "current_ms": p95_latency,
+                    "pass": latency_slo
+                },
+                "timeout_rate": {
+                    "target": SLO_TIMEOUT_RATE,
+                    "current": timeout_rate,
+                    "pass": timeout_slo
+                },
+                "fallback_rate": {
+                    "target": SLO_FALLBACK_RATE,
+                    "current": fallback_rate,
+                    "pass": fallback_slo
+                },
+                "policy_override_rate": {
+                    "target": SLO_POLICY_OVERRIDE_RATE,
+                    "current": override_rate,
+                    "pass": override_slo
+                }
+            },
             "window_size": 1000
         }

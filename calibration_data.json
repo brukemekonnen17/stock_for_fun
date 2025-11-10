@@ -260,7 +260,547 @@
       "timestamp": "2025-11-05T15:30:39.104980",
       "arm_name": "NEWS_SPIKE",
       "reward": null
+    },
+    {
+      "decision_id": "analyze-NVDA-1762383972",
+      "ticker": "NVDA",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T18:06:45.881091",
+      "arm_name": "EARNINGS_PRE",
+      "reward": null
+    },
+    {
+      "decision_id": "analyze-NVDA-1762385054",
+      "ticker": "NVDA",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T18:24:47.007017",
+      "arm_name": "REACTIVE",
+      "reward": null
+    },
+    {
+      "decision_id": "analyze-NVDA-1762385096",
+      "ticker": "NVDA",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T18:25:28.106890",
+      "arm_name": "POST_EVENT_MOMO",
+      "reward": null
+    },
+    {
+      "decision_id": "analyze-NVDA-1762385152",
+      "ticker": "NVDA",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T18:26:23.416428",
+      "arm_name": "EARNINGS_PRE",
+      "reward": null
+    },
+    {
+      "decision_id": "analyze-NVDA-1762385303",
+      "ticker": "NVDA",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T18:28:53.279161",
+      "arm_name": "POST_EVENT_MOMO",
+      "reward": null
+    },
+    {
+      "decision_id": "test-nvda",
+      "ticker": "NVDA",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T18:29:24.554739",
+      "arm_name": "NEWS_SPIKE",
+      "reward": null
+    },
+    {
+      "decision_id": "analyze-NVDA-1762385374",
+      "ticker": "NVDA",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T18:30:08.675679",
+      "arm_name": "REACTIVE",
+      "reward": null
+    },
+    {
+      "decision_id": "test-v4",
+      "ticker": "NVDA",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T18:37:47.076202",
+      "arm_name": "SKIP",
+      "reward": null
+    },
+    {
+      "decision_id": "test-fixed",
+      "ticker": "NVDA",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T18:38:41.559447",
+      "arm_name": "SKIP",
+      "reward": null
+    },
+    {
+      "decision_id": "test-aapl-final",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T18:39:07.663869",
+      "arm_name": "NEWS_SPIKE",
+      "reward": null
+    },
+    {
+      "decision_id": "analyze-NVDA-1762386073",
+      "ticker": "NVDA",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T18:41:51.533207",
+      "arm_name": "REACTIVE",
+      "reward": null
+    },
+    {
+      "decision_id": "analyze-NVDA-1762397447",
+      "ticker": "NVDA",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T21:51:38.854172",
+      "arm_name": "REACTIVE",
+      "reward": null
+    },
+    {
+      "decision_id": "analyze-TSLA-1762397921",
+      "ticker": "TSLA",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T21:59:16.383719",
+      "arm_name": "POST_EVENT_MOMO",
+      "reward": null
+    },
+    {
+      "decision_id": "analyze-PCSA-1762398150",
+      "ticker": "PCSA",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T22:03:03.942550",
+      "arm_name": "NEWS_SPIKE",
+      "reward": null
+    },
+    {
+      "decision_id": "analyze-PCSA-1762398327",
+      "ticker": "PCSA",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T22:06:00.620192",
+      "arm_name": "POST_EVENT_MOMO",
+      "reward": null
+    },
+    {
+      "decision_id": "debug-test",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T22:09:26.352869",
+      "arm_name": "REACTIVE",
+      "reward": null
+    },
+    {
+      "decision_id": "analyze-AAPL-1762398630",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T22:11:07.191694",
+      "arm_name": "SKIP",
+      "reward": null
+    },
+    {
+      "decision_id": "debug-capture-test",
+      "ticker": "TSLA",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T22:12:31.037715",
+      "arm_name": "REACTIVE",
+      "reward": null
+    },
+    {
+      "decision_id": "debug-raw-response",
+      "ticker": "NVDA",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T22:13:31.595617",
+      "arm_name": "NEWS_SPIKE",
+      "reward": null
+    },
+    {
+      "decision_id": "test-fixed-prompt",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T22:14:46.151495",
+      "arm_name": "REACTIVE",
+      "reward": null
+    },
+    {
+      "decision_id": "test-nvda",
+      "ticker": "NVDA",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T22:15:10.555991",
+      "arm_name": "REACTIVE",
+      "reward": null
+    },
+    {
+      "decision_id": "warmup-1",
+      "ticker": "TEST1",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T22:16:01.705276",
+      "arm_name": "SKIP",
+      "reward": null
+    },
+    {
+      "decision_id": "analyze-AAPL-1762398920",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T22:16:01.971918",
+      "arm_name": "POST_EVENT_MOMO",
+      "reward": null
+    },
+    {
+      "decision_id": "warmup-2",
+      "ticker": "TEST2",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T22:16:12.866805",
+      "arm_name": "NEWS_SPIKE",
+      "reward": null
+    },
+    {
+      "decision_id": "warmup-3",
+      "ticker": "TEST3",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T22:16:22.682316",
+      "arm_name": "POST_EVENT_MOMO",
+      "reward": null
+    },
+    {
+      "decision_id": "warmup-4",
+      "ticker": "TEST4",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T22:16:32.017000",
+      "arm_name": "POST_EVENT_MOMO",
+      "reward": null
+    },
+    {
+      "decision_id": "warmup-5",
+      "ticker": "TEST5",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T22:16:42.196645",
+      "arm_name": "EARNINGS_PRE",
+      "reward": null
+    },
+    {
+      "decision_id": "aapl-test-final",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T22:17:09.987545",
+      "arm_name": "REACTIVE",
+      "reward": null
+    },
+    {
+      "decision_id": "aapl-fix-test",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T22:19:45.560981",
+      "arm_name": "SKIP",
+      "reward": null
+    },
+    {
+      "decision_id": "aapl-final-test",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T22:20:52.822985",
+      "arm_name": "EARNINGS_PRE",
+      "reward": null
+    },
+    {
+      "decision_id": "analyze-AAPL-1762399266",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.8,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T22:21:59.489232",
+      "arm_name": "EARNINGS_PRE",
+      "reward": null
+    },
+    {
+      "decision_id": "nvda-success-test",
+      "ticker": "NVDA",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T22:21:59.699305",
+      "arm_name": "EARNINGS_PRE",
+      "reward": null
+    },
+    {
+      "decision_id": "stats-test",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T22:25:16.438679",
+      "arm_name": "REACTIVE",
+      "reward": null
+    },
+    {
+      "decision_id": "stats-test2",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-05T22:25:34.335535",
+      "arm_name": "REACTIVE",
+      "reward": null
+    },
+    {
+      "decision_id": "stats-test",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-06T01:03:59.749171",
+      "arm_name": "POST_EVENT_MOMO",
+      "reward": null
+    },
+    {
+      "decision_id": "analyze-AAPL-1762409057",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-06T01:04:53.687996",
+      "arm_name": "SKIP",
+      "reward": null
+    },
+    {
+      "decision_id": "stats-test2",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-06T01:04:54.053853",
+      "arm_name": "SKIP",
+      "reward": null
+    },
+    {
+      "decision_id": "stats-fix-test",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-06T01:06:24.085868",
+      "arm_name": "POST_EVENT_MOMO",
+      "reward": null
+    },
+    {
+      "decision_id": "analyze-AAPL-1762409193",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-06T01:07:05.425439",
+      "arm_name": "NEWS_SPIKE",
+      "reward": null
+    },
+    {
+      "decision_id": "stats-final-test",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-06T01:07:47.348511",
+      "arm_name": "NEWS_SPIKE",
+      "reward": null
+    },
+    {
+      "decision_id": "debug-stats",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-06T01:08:16.404677",
+      "arm_name": "NEWS_SPIKE",
+      "reward": null
+    },
+    {
+      "decision_id": "stats-final2",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-06T01:09:11.943070",
+      "arm_name": "NEWS_SPIKE",
+      "reward": null
+    },
+    {
+      "decision_id": "stats-working-test",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-06T01:12:00.546689",
+      "arm_name": "REACTIVE",
+      "reward": null
+    },
+    {
+      "decision_id": "nvda-stats",
+      "ticker": "NVDA",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-06T01:12:31.441217",
+      "arm_name": "SKIP",
+      "reward": null
+    },
+    {
+      "decision_id": "full-stats-check",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-06T01:13:05.132210",
+      "arm_name": "REACTIVE",
+      "reward": null
+    },
+    {
+      "decision_id": "full-stats-check2",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-06T01:13:20.216913",
+      "arm_name": "SKIP",
+      "reward": null
+    },
+    {
+      "decision_id": "nvda-stats-check",
+      "ticker": "NVDA",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-06T01:18:00.441471",
+      "arm_name": "NEWS_SPIKE",
+      "reward": null
+    },
+    {
+      "decision_id": "test_aapl_1762391886",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-06T01:18:32.694304",
+      "arm_name": "REACTIVE",
+      "reward": null
+    },
+    {
+      "decision_id": "exec_report_test2",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-06T02:20:45.067501",
+      "arm_name": "POST_EVENT_MOMO",
+      "reward": null
+    },
+    {
+      "decision_id": "exec_report_1762395684488",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-06T02:21:48.940921",
+      "arm_name": "POST_EVENT_MOMO",
+      "reward": null
+    },
+    {
+      "decision_id": "exec_report_1762442314179",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-06T15:18:49.987777",
+      "arm_name": "POST_EVENT_MOMO",
+      "reward": null
+    },
+    {
+      "decision_id": "exec_report_1762443465417",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-06T15:38:35.567260",
+      "arm_name": "SKIP",
+      "reward": null
+    },
+    {
+      "decision_id": "llm_v2_1762443888341",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-06T15:45:14.072932",
+      "arm_name": "REACTIVE",
+      "reward": null
+    },
+    {
+      "decision_id": "llm_v2_1762444201075",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-06T15:50:20.724193",
+      "arm_name": "NEWS_SPIKE",
+      "reward": null
+    },
+    {
+      "decision_id": "llm_v2_1762444753951",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-06T15:59:56.223195",
+      "arm_name": "SKIP",
+      "reward": null
+    },
+    {
+      "decision_id": "llm_v2_1762445002120",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-06T16:03:45.172303",
+      "arm_name": "REACTIVE",
+      "reward": null
+    },
+    {
+      "decision_id": "llm_v2_1762445094924",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-06T16:05:13.157782",
+      "arm_name": "SKIP",
+      "reward": null
+    },
+    {
+      "decision_id": "llm_v2_1762445246970",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-06T16:07:46.038898",
+      "arm_name": "POST_EVENT_MOMO",
+      "reward": null
+    },
+    {
+      "decision_id": "llm_v2_1762721659324",
+      "ticker": "RSLA",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-09T20:54:30.607510",
+      "arm_name": "NEWS_SPIKE",
+      "reward": null
+    },
+    {
+      "decision_id": "notebook_AAPL_1762723475",
+      "ticker": "AAPL",
+      "predicted_confidence": 0.5,
+      "actual_outcome": -1,
+      "timestamp": "2025-11-09T21:24:52.776901",
+      "arm_name": "NEWS_SPIKE",
+      "reward": null
     }
   ],
-  "last_updated": "2025-11-05T15:30:39.105063"
+  "last_updated": "2025-11-09T21:24:52.777054"
 }
