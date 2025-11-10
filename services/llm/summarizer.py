@@ -138,13 +138,38 @@ async def summarize_contract(contract: Dict[str, Any]) -> Dict[str, Any]:
         # Call LLM with temperature=0 for determinism
         response_text = await propose_trade_v2(messages)
         
+        # Check if response is empty (API key missing or LLM unavailable)
+        if not response_text or response_text.strip() == "":
+            raise ValueError(
+                "LLM returned empty response. Check ANTHROPIC_API_KEY is set and LLM service is available."
+            )
+        
+        # Try to extract JSON if wrapped in markdown code blocks
+        response_text = response_text.strip()
+        if response_text.startswith("```"):
+            # Extract JSON from markdown code block
+            lines = response_text.split("\n")
+            json_start = None
+            json_end = None
+            for i, line in enumerate(lines):
+                if line.strip().startswith("```json") or line.strip().startswith("```"):
+                    json_start = i + 1
+                    break
+            if json_start:
+                for i in range(len(lines) - 1, json_start, -1):
+                    if lines[i].strip().startswith("```"):
+                        json_end = i
+                        break
+                if json_end:
+                    response_text = "\n".join(lines[json_start:json_end])
+        
         # Parse JSON response
         try:
             summary = json.loads(response_text)
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse LLM response as JSON: {e}")
-            logger.error(f"Response text: {response_text[:500]}")
-            raise ValueError(f"LLM returned invalid JSON: {e}")
+            logger.error(f"Response text (first 1000 chars): {response_text[:1000]}")
+            raise ValueError(f"LLM returned invalid JSON: {e}. Response preview: {response_text[:200]}")
         
         # Validate summary structure
         required_summary_fields = ['executive_summary', 'decision_rationale', 'risks_and_watch', 'action_template']
