@@ -73,6 +73,11 @@ All numbers must cite the **exact JSON path(s)** used.
    * Percentages: 1 decimal (e.g., `3.2%`). bps: integer. Prices: `$` + 2 decimals.
    * If a value is missing, set to `null` and add a **single-line** reason in `omissions[]`.
 
+8. **Executive Summary Length**
+   * **Minimum 150 words** (approximately 750+ characters) for BUY/REVIEW cases.
+   * **Minimum 100 words** (approximately 400+ characters) for SKIP cases is acceptable.
+   * Always be comprehensive and cite specific numbers with paths.
+
 Return JSON only."""
 
 def build_summarizer_prompt(contract: Dict[str, Any]) -> list[dict]:
@@ -109,7 +114,7 @@ OUTPUT SCHEMA (strict):
   "run_id": "string",
   "verdict": "BUY | REVIEW | SKIP",
   "reason_code": "string",
-  "executive_summary": "string (150-250 words, decisive tone)",
+  "executive_summary": "string (150-250 words, decisive tone, minimum 100 characters)",
   "decision": {{
     "best_horizon": "number|null",
     "q_value": "number|null",

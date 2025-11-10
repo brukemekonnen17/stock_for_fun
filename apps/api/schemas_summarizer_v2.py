@@ -46,9 +46,9 @@ class SummaryResponseV2(BaseModel):
     reason_code: str = Field(..., description="Reason code (e.g., STATS_WEAK, ECON_VETO)")
     executive_summary: str = Field(
         ...,
-        min_length=150,
-        max_length=2000,
-        description="150-250 word executive summary (decisive tone)"
+        min_length=100,  # Allow shorter summaries for SKIP cases (100 chars ≈ 15-20 words)
+        max_length=2000,  # 150-250 words ≈ 750-1250 chars, allow buffer
+        description="150-250 word executive summary (decisive tone, minimum 100 chars for SKIP cases)"
     )
     decision: DecisionData = Field(..., description="Decision evidence and gates")
     action: ActionData = Field(..., description="Action template")
