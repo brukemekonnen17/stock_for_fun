@@ -27,7 +27,7 @@ class SummaryResponse(BaseModel):
     executive_summary: str = Field(
         ...,
         min_length=150,
-        max_length=500,
+        max_length=2000,  # 150-250 words ≈ 750-1250 chars, allow buffer
         description="150-250 word executive summary"
     )
     decision_rationale: List[str] = Field(

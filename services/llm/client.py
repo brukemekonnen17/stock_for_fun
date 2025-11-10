@@ -20,7 +20,8 @@ API_KEY = os.getenv("ANTHROPIC_API_KEY")
 # Strip quotes if present (some .env files have quotes around values)
 if API_KEY:
     API_KEY = API_KEY.strip('"').strip("'")
-MODEL_NAME = "claude-3-sonnet-20240229" # Using Sonnet for detailed analysis (better than Haiku)
+# Try haiku first (known to work), can upgrade to sonnet later
+MODEL_NAME = "claude-3-haiku-20240307" # Using Haiku (fast, reliable)
 MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "2"))
 
 # Debug logging for API key (first/last chars only for security)
@@ -81,11 +82,13 @@ async def propose_trade_v2(messages: list[dict]) -> str:
     }
     
     # Claude Messages API format: system is top-level, messages only contains user/assistant
+    # Haiku max_tokens: 4096, Sonnet/Opus: 8192
+    max_tokens_limit = 4096 if "haiku" in MODEL_NAME.lower() else 8192
     body = {
         "model": MODEL_NAME,
         "messages": [user_message],  # Only user/assistant messages
-        "max_tokens": 8000,  # Increased for detailed analysis responses (Sonnet can handle more)
-        "temperature": 0.1  # Slight temperature for more natural, detailed explanations
+        "max_tokens": max_tokens_limit,
+        "temperature": 0.0  # Deterministic for summarization
     }
     
     # Add system prompt as top-level parameter if present
