@@ -121,12 +121,12 @@ class AlphaVantageAdapter:
         }
     
     def daily_ohlc(self, ticker: str, lookback: int = 60) -> List[dict]:
-        """Get daily OHLC data"""
+        """Get daily OHLC data with split-adjusted prices"""
         ticker = ticker.upper().strip()
         
-        # Use TIME_SERIES_DAILY function
+        # Use TIME_SERIES_DAILY_ADJUSTED for split-adjusted data
         data = self._get({
-            "function": "TIME_SERIES_DAILY",
+            "function": "TIME_SERIES_DAILY_ADJUSTED",
             "symbol": ticker,
             "outputsize": "compact" if lookback <= 100 else "full"
         })
@@ -148,7 +148,8 @@ class AlphaVantageAdapter:
                 "high": float(day_data["2. high"]),
                 "low": float(day_data["3. low"]),
                 "close": float(day_data["4. close"]),
-                "volume": int(float(day_data["5. volume"])),
+                "adj_close": float(day_data["5. adjusted close"]),  # Split-adjusted close
+                "volume": int(float(day_data["6. volume"])),
             })
         
         return out

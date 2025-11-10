@@ -186,6 +186,7 @@ class YFMarketData:
                     "high": float(row["High"]),
                     "low": float(row["Low"]),
                     "close": float(row["Close"]),
+                    "adj_close": float(row.get("Adj Close", row["Close"])),  # Split-adjusted close
                     "volume": int(row["Volume"]) if not pd.isna(row["Volume"]) else 0,
                 })
             return out

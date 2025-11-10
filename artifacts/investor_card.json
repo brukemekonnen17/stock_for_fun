@@ -1,6 +1,6 @@
 {
   "ticker": "NVDA",
-  "timestamp": "2025-11-09 22:39:27",
+  "timestamp": "2025-11-09 23:06:26",
   "verdict": "REVIEW",
   "score": 0.0,
   "drivers": {
@@ -16,7 +16,8 @@
     "ci_95": "[nan, nan]",
     "p_value": null,
     "q_value": null,
-    "hit_rate": null
+    "hit_rate": null,
+    "significant": false
   },
   "plan": {
     "entry": 188.15,
