@@ -1,6 +1,7 @@
 {
   "ticker": "NVDA",
-  "timestamp": "2025-11-10 10:12:06",
+  "timestamp": "2025-11-10 10:51:13",
+  "run_id": "50b0f37965727112",
   "verdict": "REVIEW",
   "score": 0.0,
   "drivers": {
@@ -17,7 +18,13 @@
     "p_value": null,
     "q_value": null,
     "hit_rate": null,
-    "significant": false
+    "n_events": 2,
+    "limited_power": true,
+    "effect_bps": 38.213248247662705,
+    "effect_floor_pass": true,
+    "significant": false,
+    "significance_chip": "YELLOW",
+    "significance_reason": "Limited power (n=2 < 20)"
   },
   "plan": {
     "entry": 188.15,
