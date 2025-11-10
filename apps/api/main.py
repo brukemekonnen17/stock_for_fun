@@ -285,8 +285,8 @@ def features():
         "useLlmV2": f["ENABLE_LLM_PHASE1"],
     }
 
-# M1: LLM Summary Service
-@app.post("/summarize", response_model=SummaryResponse)
+# M1: LLM Summary Service (v2 - Hardline)
+@app.post("/summarize", response_model=SummaryResponseV2)
 async def summarize(request: SummarizeRequest):
     """
     Summarize an analysis_contract.json into structured narrative.
@@ -326,33 +326,18 @@ async def summarize(request: SummarizeRequest):
         # Generate summary
         summary = await summarize_contract(contract)
         
-        # Validate response schema (try v2 first, fallback to v1)
+        # Validate response schema (v2 - hardline)
         try:
             validated = SummaryResponseV2(**summary)
             return validated
         except Exception as e:
-            # Fallback to v1 schema for backward compatibility
-            try:
-                # Convert v2 to v1 format if needed
-                if 'decision' in summary and 'action' in summary:
-                    # Already v2 format, validation failed
-                    logger.error(f"Summary validation failed: {e}")
-                    logger.error(f"Summary: {summary}")
-                    raise HTTPException(
-                        status_code=500,
-                        detail=f"Summary validation failed: {str(e)}"
-                    )
-                else:
-                    # Try v1 schema
-                    validated = SummaryResponse(**summary)
-                    return validated
-            except Exception as e2:
-                logger.error(f"Summary validation failed (both v1 and v2): {e2}")
-                logger.error(f"Summary: {summary}")
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Summary validation failed: {str(e2)}"
-                )
+            logger.error(f"Summary validation failed: {e}")
+            logger.error(f"Summary keys: {list(summary.keys()) if isinstance(summary, dict) else 'not a dict'}")
+            logger.error(f"Summary preview: {str(summary)[:500] if isinstance(summary, dict) else summary}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Summary validation failed: {str(e)}"
+            )
             
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))

@@ -366,11 +366,27 @@
                 });
                 
                 if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.detail || `HTTP ${response.status}`);
+                    // Try to parse error as JSON, fallback to text
+                    let errorMsg = `HTTP ${response.status}`;
+                    try {
+                        const errorJson = await response.json();
+                        errorMsg = errorJson.detail || errorMsg;
+                    } catch (e) {
+                        const errorText = await response.text();
+                        errorMsg = errorText || errorMsg;
+                    }
+                    throw new Error(errorMsg);
                 }
                 
-                const data = await response.json();
+                // Parse response - handle both JSON and text responses
+                const responseText = await response.text();
+                let data;
+                try {
+                    data = JSON.parse(responseText);
+                } catch (e) {
+                    // If response is not JSON, show error
+                    throw new Error(`Invalid JSON response: ${responseText.substring(0, 200)}`);
+                }
                 displaySummary(data);
                 hideStatus();
             } catch (error) {
@@ -389,78 +405,103 @@
             // Executive Summary
             document.getElementById('executiveSummary').textContent = data.executive_summary;
             
-            // Decision Rationale
+            // Decision Rationale (v2 format: rationale[] with point and paths)
             const rationaleList = document.getElementById('rationaleList');
             rationaleList.innerHTML = '';
-            data.decision_rationale.forEach(point => {
+            const rationale = data.rationale || data.decision_rationale || [];
+            rationale.forEach(item => {
                 const li = document.createElement('li');
-                li.textContent = point;
+                const point = typeof item === 'string' ? item : item.point;
+                const paths = typeof item === 'object' && item.paths ? item.paths : [];
+                li.innerHTML = point + (paths.length > 0 ? ` <span style="opacity: 0.6; font-size: 0.85em;">(${paths.join(', ')})</span>` : '');
                 rationaleList.appendChild(li);
             });
             
-            // Risks & Watch
+            // Risks & Watch (v2 format: risks[] with risk and paths)
             const risksList = document.getElementById('risksList');
             risksList.innerHTML = '';
-            data.risks_and_watch.forEach(risk => {
+            const risks = data.risks || data.risks_and_watch || [];
+            risks.forEach(item => {
                 const li = document.createElement('li');
-                li.textContent = risk;
+                const risk = typeof item === 'string' ? item : item.risk;
+                const paths = typeof item === 'object' && item.paths ? item.paths : [];
+                li.innerHTML = risk + (paths.length > 0 ? ` <span style="opacity: 0.6; font-size: 0.85em;">(${paths.join(', ')})</span>` : '');
                 risksList.appendChild(li);
             });
             
-            // Action Template
+            // Action Template (v2 format: action{} with entry, stop, target, rr)
             const actionTemplate = document.getElementById('actionTemplate');
-            const action = data.action_template;
+            const action = data.action || data.action_template || {};
+            const entry = action.entry || action.entry_price || null;
+            const stop = action.stop || action.stop_price || null;
+            const target = action.target || action.target_price || null;
+            const rr = action.rr || action.risk_reward || null;
+            const stopPct = action.stop_pct || null;
+            const targetPct = action.target_pct || null;
+            const policyOk = action.policy_ok || null;
+            
             actionTemplate.innerHTML = `
-                <div class="action-item">
+                ${entry !== null ? `<div class="action-item">
                     <label>Entry Price</label>
-                    <div class="value">${formatCurrency(action.entry_price || 0)}</div>
-                </div>
-                <div class="action-item">
+                    <div class="value">${formatCurrency(entry)}</div>
+                </div>` : ''}
+                ${stop !== null ? `<div class="action-item">
                     <label>Stop Price</label>
-                    <div class="value">${formatCurrency(action.stop_price || 0)}</div>
-                </div>
-                <div class="action-item">
+                    <div class="value">${formatCurrency(stop)}</div>
+                </div>` : ''}
+                ${target !== null ? `<div class="action-item">
                     <label>Target Price</label>
-                    <div class="value">${formatCurrency(action.target_price || 0)}</div>
-                </div>
-                <div class="action-item">
+                    <div class="value">${formatCurrency(target)}</div>
+                </div>` : ''}
+                ${stopPct !== null ? `<div class="action-item">
                     <label>Stop Loss</label>
-                    <div class="value">${formatPercent(action.stop_pct || 0)}</div>
-                </div>
-                <div class="action-item">
+                    <div class="value">${formatPercent(stopPct)}</div>
+                </div>` : ''}
+                ${targetPct !== null ? `<div class="action-item">
                     <label>Target Gain</label>
-                    <div class="value">${formatPercent(action.target_pct || 0)}</div>
-                </div>
-                <div class="action-item">
+                    <div class="value">${formatPercent(targetPct)}</div>
+                </div>` : ''}
+                ${rr !== null ? `<div class="action-item">
                     <label>Risk/Reward</label>
-                    <div class="value">${(action.risk_reward || 0).toFixed(2)}</div>
-                </div>
-                <div class="action-item">
+                    <div class="value">${rr.toFixed(2)}</div>
+                </div>` : ''}
+                ${policyOk !== null ? `<div class="action-item">
                     <label>Policy OK</label>
-                    <div class="value">${action.policy_ok ? '✅ Yes' : '❌ No'}</div>
-                </div>
+                    <div class="value">${policyOk ? '✅ Yes' : '❌ No'}</div>
+                </div>` : ''}
+                ${Object.keys(action).length === 0 ? `<div class="action-item" style="grid-column: 1 / -1;">
+                    <label>Action Template</label>
+                    <div class="value">Not available</div>
+                </div>` : ''}
             `;
             
-            // Metadata
+            // Metadata (v2 format: ticker, run_id at root level)
             const metadata = document.getElementById('metadata');
-            const meta = data.metadata;
             metadata.innerHTML = `
                 <div class="metadata-item">
                     <label>Ticker</label>
-                    <div class="value">${meta.ticker || 'N/A'}</div>
+                    <div class="value">${data.ticker || 'N/A'}</div>
                 </div>
                 <div class="metadata-item">
                     <label>Run ID</label>
-                    <div class="value">${meta.run_id || 'N/A'}</div>
+                    <div class="value">${data.run_id || 'N/A'}</div>
                 </div>
                 <div class="metadata-item">
-                    <label>Timestamp</label>
-                    <div class="value">${meta.timestamp || 'N/A'}</div>
+                    <label>Verdict</label>
+                    <div class="value">${data.verdict || 'N/A'}</div>
                 </div>
                 <div class="metadata-item">
-                    <label>Prompt Version</label>
-                    <div class="value">${meta.prompt_version || 'N/A'}</div>
+                    <label>Reason Code</label>
+                    <div class="value">${data.reason_code || 'N/A'}</div>
                 </div>
+                ${data.decision ? `<div class="metadata-item">
+                    <label>Economics OK</label>
+                    <div class="value">${data.decision.economics_ok ? '✅' : '❌'}</div>
+                </div>` : ''}
+                ${data.decision ? `<div class="metadata-item">
+                    <label>Veto</label>
+                    <div class="value">${data.decision.veto || 'N/A'}</div>
+                </div>` : ''}
             `;
         }
         

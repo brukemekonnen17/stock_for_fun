@@ -1,9 +1,9 @@
 {
-  "analysis_id": "93465721-0ad4-4ad3-bc14-ab4b328881c5",
+  "analysis_id": "458d5626-b951-4677-966d-3ed9d9b401f1",
   "run_id": "a606661f297db1f0",
   "ticker": "PCSA",
   "window_days": 365,
-  "timestamp": "2025-11-10T12:49:04.473044",
+  "timestamp": "2025-11-10T13:11:33.421841",
   "drivers": {
     "pattern": "GREEN",
     "iv_rv": "NEUTRAL",
