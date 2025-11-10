@@ -1,9 +1,9 @@
 {
-  "ticker": "PCSA",
+  "ticker": "AAPL",
   "window_days": 365,
   "data_source": "cache",
   "seed": 42,
-  "run_id": "a606661f297db1f0",
-  "run_timestamp_utc": "2025-11-10T18:11:33.382356",
+  "run_id": "2d48b24ed2bb1057",
+  "run_timestamp_utc": "2025-11-10T18:23:03.503323",
   "m1_checks_passed": true
 }

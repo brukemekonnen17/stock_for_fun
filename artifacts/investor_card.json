@@ -1,7 +1,7 @@
 {
-  "ticker": "PCSA",
-  "timestamp": "2025-11-10 13:11:33",
-  "run_id": "a606661f297db1f0",
+  "ticker": "AAPL",
+  "timestamp": "2025-11-10 13:23:03",
+  "run_id": "2d48b24ed2bb1057",
   "verdict": "REVIEW",
   "score": 0.0,
   "drivers": {
@@ -20,20 +20,20 @@
     "p_value": null,
     "q_value": null,
     "hit_rate": null,
-    "n_events": 5,
+    "n_events": 2,
     "limited_power": true,
-    "effect_bps": 820.2511773940336,
+    "effect_bps": 84.76151347323824,
     "effect_floor_pass": true,
     "significant": false,
     "significance_chip": "YELLOW",
-    "significance_reason": "Limited power (n=5 < 20)"
+    "significance_reason": "Limited power (n=2 < 20)"
   },
   "plan": {
-    "entry": 0.3058,
-    "stop": 0.21582857142857143,
-    "target": 0.44075714285714285,
-    "risk_reward": 1.4999999999999993,
-    "worst_loss_pct": -29.52039804034774
+    "entry": 268.47,
+    "stop": 258.6313,
+    "target": 283.22805000000005,
+    "risk_reward": 1.5,
+    "worst_loss_pct": -3.7995048007684322
   },
   "risks": [
     "Net returns not positive after costs",
@@ -47,8 +47,8 @@
     "slippage_bps_quote": 2.0,
     "slippage_bps_atr": 50.0,
     "total_cost_bps": 55.0,
-    "impact_bps": 408.9843735376743,
-    "impact_veto": true,
+    "impact_bps": 9.027057273341665,
+    "impact_veto": false,
     "adv_ok": true
   }
 }

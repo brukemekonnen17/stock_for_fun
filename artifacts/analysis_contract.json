@@ -1,11 +1,12 @@
 {
-  "analysis_id": "458d5626-b951-4677-966d-3ed9d9b401f1",
-  "run_id": "a606661f297db1f0",
-  "ticker": "PCSA",
+  "analysis_id": "747ed91a-9d84-4c02-ba96-a17647b0cece",
+  "run_id": "2d48b24ed2bb1057",
+  "ticker": "AAPL",
   "window_days": 365,
-  "timestamp": "2025-11-10T13:11:33.421841",
+  "timestamp": "2025-11-10T13:23:03.544392",
   "drivers": {
     "pattern": "GREEN",
+    "sector_rs": "+",
     "iv_rv": "NEUTRAL",
     "meme": "MED"
   },
@@ -57,19 +58,19 @@
     "blocked": true
   },
   "plan": {
-    "entry_price": 0.3058,
-    "stop_price": 0.21582857142857143,
-    "target_price": 0.44075714285714285,
-    "stop_pct": -29.42165747921144,
-    "target_pct": 44.132486218817135,
-    "atr_used": 0.04498571428571429,
-    "worst_entry": 0.30601406,
-    "worst_exit": 0.21567749142857143,
-    "worst_loss_pct": -29.52039804034774,
-    "worst_loss_abs": 0.09033656857142855,
-    "risk_reward": 1.4999999999999993,
+    "entry_price": 268.47,
+    "stop_price": 258.6313,
+    "target_price": 283.22805000000005,
+    "stop_pct": -3.664729764964436,
+    "target_pct": 5.497094647446654,
+    "atr_used": 4.9193500000000006,
+    "worst_entry": 268.657929,
+    "worst_exit": 258.45025809,
+    "worst_loss_pct": -3.7995048007684322,
+    "worst_loss_abs": 10.207670910000047,
+    "risk_reward": 1.5,
     "total_cost_bps": 7.0,
-    "policy_ok": false
+    "policy_ok": true
   },
   "risks": [
     "Net returns not positive after costs",

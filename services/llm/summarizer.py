@@ -241,7 +241,16 @@ DECISION RULES:
 4. REVIEW if: stats_significant=true but one gate fails
 5. SKIP otherwise
 
-**CRITICAL**: Translate all statistical terms into plain language. Explain what the user can't see. Make it actionable."""
+**CRITICAL**: Translate all statistical terms into plain language. Explain what the user can't see. Make it actionable.
+
+**REASON_CODE REQUIREMENT**: You MUST provide a `reason_code` string. Use:
+- "ECON_VETO" if economics.blocked=true
+- "ECON_BLOCK" if net_median is null or ≤ 0
+- "STATS_WEAK" if no horizon has q<0.10 AND effect≥30bps
+- "REVIEW_CONDITIONAL" if verdict=REVIEW
+- "BUY_APPROVED" if verdict=BUY
+- "TICKER_MISMATCH" if ticker doesn't match
+- "OTHER" for other SKIP reasons"""
     
     return [
         {"role": "system", "content": SUMMARIZER_SYSTEM_PROMPT},
@@ -302,10 +311,49 @@ async def summarize_contract(contract: Dict[str, Any]) -> Dict[str, Any]:
             raise ValueError(f"LLM returned invalid JSON: {e}. Response preview: {response_text[:200]}")
         
         # Validate summary structure (v2 schema)
-        required_summary_fields = ['ticker', 'run_id', 'verdict', 'reason_code', 'executive_summary', 'decision', 'action', 'rationale', 'risks']
+        required_summary_fields = ['ticker', 'run_id', 'verdict', 'executive_summary', 'decision', 'action', 'rationale', 'risks']
         missing = [f for f in required_summary_fields if f not in summary]
         if missing:
             raise ValueError(f"Summary missing required fields: {missing}")
+        
+        # Ensure reason_code exists and is not None (compute from contract if missing)
+        if 'reason_code' not in summary or summary.get('reason_code') is None:
+            verdict = summary.get('verdict', 'SKIP')
+            economics = contract.get('economics', {})
+            evidence = contract.get('evidence', [])
+            
+            # Compute reason_code based on verdict and contract data
+            if verdict == 'SKIP':
+                if economics.get('blocked') is True:
+                    summary['reason_code'] = 'ECON_VETO'
+                elif economics.get('net_median') is None or economics.get('net_median', 0) <= 0:
+                    summary['reason_code'] = 'ECON_BLOCK'
+                else:
+                    # Check if stats are weak
+                    has_significant = False
+                    for ev in evidence:
+                        q = ev.get('q')
+                        effect = ev.get('effect')
+                        if q is not None and q < 0.10:
+                            if effect is not None:
+                                effect_bps = int(effect * 10000)
+                                if effect_bps >= 30:
+                                    has_significant = True
+                                    break
+                    if not has_significant:
+                        summary['reason_code'] = 'STATS_WEAK'
+                    else:
+                        summary['reason_code'] = 'OTHER'
+            elif verdict == 'REVIEW':
+                summary['reason_code'] = 'REVIEW_CONDITIONAL'
+            elif verdict == 'BUY':
+                summary['reason_code'] = 'BUY_APPROVED'
+            else:
+                summary['reason_code'] = 'UNKNOWN'
+        
+        # Ensure reason_code is a string (never None)
+        if not isinstance(summary.get('reason_code'), str):
+            summary['reason_code'] = str(summary.get('reason_code', 'UNKNOWN'))
         
         # Ensure omissions array exists
         if 'omissions' not in summary:
