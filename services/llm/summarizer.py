@@ -110,6 +110,11 @@ Use **only** fields present in `analysis_contract`. **Never invent.**
    * **Action guidance**: "You should [action] because [reason based on evidence]..."
    * **Minimum 200 words** for BUY/REVIEW, **150 words** for SKIP
    * Always cite specific numbers with paths
+   
+   **CRITICAL**: If ALL evidence entries have null p/q/effect/ci values, this means the notebook analysis did NOT complete successfully. Explain this clearly:
+   - "The statistical analysis could not be completed because [reason: insufficient events, data loading failure, or analysis error]"
+   - "To get valid statistical results, the notebook must be run completely from start to finish"
+   - "For well-known stocks like AAPL, this typically indicates the analysis pipeline failed or was interrupted"
 
 7. **Rationale Points**
    * Each point must explain **what the evidence means** and **why it matters**
@@ -163,7 +168,8 @@ def build_summarizer_prompt(contract: Dict[str, Any]) -> list[dict]:
 For each evidence entry in `evidence[]`, explain:
 1. **What we tested**: "At H=[horizon] days, we tested if the EMA crossover pattern predicts returns"
 2. **Statistical reliability**: 
-   - If p is null: "No statistical test was completed - we cannot assess if this pattern is reliable"
+   - **If ALL evidence entries have null p/q/effect/ci**: "⚠️ CRITICAL: The statistical analysis did NOT complete successfully. All p-values, q-values, effect sizes, and confidence intervals are null across all horizons (evidence[0-4].p=null, evidence[0-4].q=null, evidence[0-4].effect=null). This indicates the notebook analysis pipeline failed or was interrupted before statistical tests could be run. For well-known stocks like [ticker], this is unexpected and suggests the analysis needs to be re-run completely from start to finish."
+   - If p is null (but some other entries have data): "No statistical test was completed for this horizon - we cannot assess if this pattern is reliable at this time frame"
    - If p ≥ 0.10: "p-value of [p] means there's a [p*100]% chance this is random noise - the pattern is NOT statistically reliable"
    - If p < 0.10 but q ≥ 0.10: "p-value of [p] suggests significance, but q-value of [q] means it doesn't survive multiple testing correction - may be a false positive"
    - If q < 0.10: "q-value of [q] means this pattern survives multiple testing correction - statistically reliable"
