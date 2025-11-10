@@ -319,7 +319,14 @@ analysis_contract:
 {contract_str}
 
 OUTPUT SCHEMA (strict):
-**CRITICAL**: Output must be valid JSON. Do NOT include literal newlines or control characters in string values. Use spaces instead of newlines within text.
+**CRITICAL JSON FORMATTING RULES**:
+1. Output must be valid JSON - test it before sending
+2. **AVOID quotes in natural language**: Instead of "The tape feels 'hot'", write "The tape feels hot" or "The tape is hot"
+3. **If you MUST use quotes**: Escape them with \\" (e.g., "He said \\"hello\\"")
+4. **PREFER single quotes in natural language**: Use 'hot' instead of "hot" when possible
+5. **No literal newlines in strings**: Use spaces instead of line breaks
+6. **No control characters**: Remove any special characters that break JSON parsing
+7. **Test your JSON**: Make sure it parses correctly - invalid JSON will cause errors
 
 {{
   "ticker": "string",
@@ -433,29 +440,99 @@ async def summarize_contract(contract: Dict[str, Any]) -> Dict[str, Any]:
                 if json_end:
                     response_text = "\n".join(lines[json_start:json_end])
         
-        # Clean response text (remove control characters that break JSON)
-        # Replace literal newlines, tabs, and control chars within string values
+        # Clean response text (remove control characters and fix common JSON issues)
         import re
         # First, try to parse as-is
         try:
             summary = json.loads(response_text)
         except json.JSONDecodeError as e:
             logger.warning(f"Initial JSON parse failed: {e}. Attempting to clean response...")
-            # Clean control characters (but preserve JSON structure)
-            # Replace unescaped newlines and tabs within strings
             cleaned_text = response_text
-            # Replace control characters (ASCII 0-31 except \n, \r, \t which should be escaped)
+            
+            # Step 1: Remove control characters (ASCII 0-31 except \n, \r, \t which should be escaped)
             cleaned_text = re.sub(r'[\x00-\x08\x0b-\x0c\x0e-\x1f]', '', cleaned_text)
-            # Try to fix common issues: unescaped newlines in strings
-            # This is tricky - we don't want to break JSON structure, just fix string content
+            
+            # Step 2: Fix common JSON issues
+            # Replace unescaped newlines and tabs with spaces (but preserve escaped ones)
+            cleaned_text = re.sub(r'(?<!\\)\n', ' ', cleaned_text)
+            cleaned_text = re.sub(r'(?<!\\)\r', ' ', cleaned_text)
+            cleaned_text = re.sub(r'(?<!\\)\t', ' ', cleaned_text)
+            
+            # Step 3: Try to fix unescaped quotes in string values
+            def fix_quotes_simple(text):
+                """Fix unescaped quotes within JSON string values using state machine."""
+                result = []
+                i = 0
+                in_string_value = False
+                escape_next = False
+                
+                while i < len(text):
+                    char = text[i]
+                    
+                    if escape_next:
+                        result.append(char)
+                        escape_next = False
+                    elif char == '\\':
+                        result.append(char)
+                        escape_next = True
+                    elif char == '"':
+                        # Check if we're entering a string value (after ": ")
+                        if i >= 2 and text[i-2:i] == ': ':
+                            in_string_value = True
+                            result.append(char)
+                        # Check if we're exiting a string value (followed by , } ] or whitespace)
+                        elif in_string_value:
+                            # Look ahead to see if this closes the string
+                            if i + 1 < len(text):
+                                next_char = text[i + 1]
+                                if next_char in [',', '}', ']', '\n', '\r', ' ', '\t']:
+                                    in_string_value = False
+                                    result.append(char)
+                                else:
+                                    # This is an unescaped quote inside the string - escape it
+                                    result.append('\\"')
+                            else:
+                                # End of text, close the string
+                                in_string_value = False
+                                result.append(char)
+                        else:
+                            result.append(char)
+                    else:
+                        result.append(char)
+                    
+                    i += 1
+                
+                return ''.join(result)
+            
+            # Try parsing after basic cleaning
             try:
                 summary = json.loads(cleaned_text)
                 logger.info("Successfully parsed after cleaning control characters")
             except json.JSONDecodeError as e2:
-                logger.error(f"Failed to parse LLM response as JSON even after cleaning: {e2}")
-                logger.error(f"Original response (first 1000 chars): {response_text[:1000]}")
-                logger.error(f"Cleaned response (first 1000 chars): {cleaned_text[:1000]}")
-                raise ValueError(f"LLM returned invalid JSON: {e2}. Response preview: {response_text[:200]}")
+                # If that fails, try quote fixing
+                try:
+                    cleaned_text = fix_quotes_simple(cleaned_text)
+                    summary = json.loads(cleaned_text)
+                    logger.info("Successfully parsed after cleaning quotes and control characters")
+                except (json.JSONDecodeError, Exception) as e3:
+                    # Last resort: aggressive cleaning - remove all problematic chars
+                    cleaned_text = re.sub(r'[\x00-\x1f]', '', cleaned_text)
+                    # Collapse multiple spaces
+                    cleaned_text = re.sub(r' +', ' ', cleaned_text)
+                    try:
+                        summary = json.loads(cleaned_text)
+                        logger.info("Successfully parsed after aggressive cleaning")
+                    except json.JSONDecodeError as e4:
+                        logger.error(f"Failed to parse LLM response as JSON after all cleaning attempts: {e4}")
+                        logger.error(f"Error at position: {e4.pos if hasattr(e4, 'pos') else 'unknown'}")
+                        logger.error(f"Original response (first 1000 chars): {response_text[:1000]}")
+                        logger.error(f"Cleaned response (first 1000 chars): {cleaned_text[:1000]}")
+                        # Try to show the problematic area
+                        if hasattr(e4, 'pos') and e4.pos < len(cleaned_text):
+                            start = max(0, e4.pos - 50)
+                            end = min(len(cleaned_text), e4.pos + 50)
+                            logger.error(f"Problem area: {cleaned_text[start:end]}")
+                        raise ValueError(f"LLM returned invalid JSON: {e4}. Response preview: {response_text[:200]}")
         
         # Validate summary structure (v2 schema)
         required_summary_fields = ['ticker', 'run_id', 'verdict', 'executive_summary', 'decision', 'action', 'rationale', 'risks']
@@ -525,13 +602,12 @@ def load_contract_from_file(file_path: str) -> Dict[str, Any]:
         Contract dictionary
         
     Raises:
-        FileNotFoundError: If file doesn't exist
-        ValueError: If JSON is invalid
+        FileNotFoundError: If the file does not exist.
+        ValueError: If the JSON is invalid.
     """
     path = Path(file_path)
-    if not path.exists():
+    if not path.is_file():
         raise FileNotFoundError(f"Contract file not found: {file_path}")
-    
     with open(path, 'r') as f:
         try:
             contract = json.load(f)
