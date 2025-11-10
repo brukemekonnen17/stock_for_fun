@@ -1,6 +1,6 @@
 {
   "ticker": "NVDA",
-  "timestamp": "2025-11-10 11:04:21",
+  "timestamp": "2025-11-10 11:08:18",
   "run_id": "50b0f37965727112",
   "verdict": "REVIEW",
   "score": 0.0,
@@ -41,5 +41,14 @@
     "Regime not aligned"
   ],
   "why_now": "Review conditions.",
-  "car_ci": "N/A"
+  "car_ci": "N/A",
+  "economics": {
+    "spread_bps_quote": 7.0,
+    "slippage_bps_quote": 2.0,
+    "slippage_bps_atr": 50.0,
+    "total_cost_bps": 55.0,
+    "impact_bps": 5.376966229675254,
+    "impact_veto": false,
+    "adv_ok": "True"
+  }
 }
