@@ -43,6 +43,33 @@ SUMMARIZER_SYSTEM_PROMPT = """You are a senior equity analyst explaining complex
 
 Use **only** fields present in `analysis_contract`. **Never invent.**
 
+### Window Extension (if needed)
+- If `window_extension` exists and is not null, the analysis detected **insufficient events**
+- Explain:
+  - Current event count vs required (need ≥10 for statistical tests)
+  - Recommended window extension (e.g., from 365 to 730 days)
+  - Why: "Not enough crossover events in the current time window to run reliable statistical tests"
+- **Action**: "Re-run the analysis with a longer time window ([recommended_window_days] days) to gather more events"
+
+### Hybrid Decision Framework (if available)
+- If `hybrid_decision` exists in contract, **prioritize this verdict** over the basic statistical verdict
+- Explain the **Evidence Score** (0-1) and its breakdown:
+  - **S (Stats)**: Statistical edge from p/q/effect (weight: 40%)
+  - **F (Flow)**: Volume/participation surge (weight: 20%)
+  - **R (Regime)**: Trend/volatility alignment (weight: 20%)
+  - **C (Catalyst)**: Time-sensitive events (weight: 10%)
+  - **M (Social/Meme)**: Nowcast attention (weight: 10%)
+- Report which **safety gates** passed/failed (liquidity, capacity, spread, impact, data health)
+- Explain the **playbook recommendation**:
+  - **Swing Playbook**: Stats + regime driven, 1.5×ATR risk, 2R target, 3-10 days
+  - **Reactive Playbook**: Flow/social driven, 0.6×ATR risk, 1.5R target, 0-2 days
+- Translate verdict: BUY (evidence ≥0.65), REACTIVE (0.45-0.65), SKIP (<0.45 or safety fail)
+
+### Social & Alternative Signals
+- If `social_signals.meme` exists, explain meme risk level (LOW/MED/HIGH), z-score, and what it implies for sentiment-driven volatility.
+- If `social_signals.sentiment` exists, report total mentions, bull/bear ratio, and whether the signal amplifies or contradicts the statistical view.
+- If social signals are missing, simply note they are not available (do not speculate).
+
 ### Statistical Interpretation Guide (translate these for the user):
 
 **Pattern Reliability:**
@@ -80,6 +107,17 @@ Use **only** fields present in `analysis_contract`. **Never invent.**
 
 ### Policy (must apply, in order)
 
+**CRITICAL: Check window_extension FIRST before saying "analysis failed"**
+
+0. **Window Extension Check (HIGHEST PRIORITY)**
+   * If `window_extension` exists and is not null:
+     - **DO NOT** say "analysis failed" or "pipeline interrupted"
+     - **DO** explain: "We detected [current_events] valid events, but need at least [required_events] for statistical tests"
+     - **DO** state: "The analysis window of [current_window_days] days is too short. Extend to [recommended_window_days] days to gather more events"
+     - **DO** provide action: "Re-run the notebook with WINDOW_DAYS = [recommended_window_days] in Cell 2, then re-run from Cell 6 onwards"
+     - Set `reason_code="INSUFFICIENT_EVENTS"` and `verdict="SKIP"` with clear explanation
+     - This is NOT a failure - it's a data collection issue that can be fixed
+
 1. **Eligibility gates**
    * If `ticker` ≠ requested ticker → `verdict="SKIP"`, `reason_code="TICKER_MISMATCH"`.
    * If `economics.blocked == true` → `verdict="SKIP"`, `reason_code="ECON_VETO"`.
@@ -91,9 +129,15 @@ Use **only** fields present in `analysis_contract`. **Never invent.**
    * If S is empty → `stats_significant=false`.
 
 3. **Verdict**
-   * **BUY** if `stats_significant=true` **and** `economics.net_median > 0` **and** `economics.blocked=false` **and** `plan.policy_ok=true`.
-   * **REVIEW** if `stats_significant=true` but fails **one** of {net_median>0, blocked=false, policy_ok=true}.
-   * **SKIP** otherwise.
+   * **HYBRID MODE** (if `hybrid_decision` exists and `hybrid_decision.evidence_score` is not null):
+     - Use `hybrid_decision.verdict` as primary verdict
+     - **BUY** if `hybrid_decision.verdict = "BUY"` (evidence_score ≥ 0.65, safety gates passed)
+     - **REACTIVE** if `hybrid_decision.verdict = "REACTIVE"` (evidence_score 0.45-0.65, flow/social driven)
+     - **SKIP** if `hybrid_decision.verdict = "SKIP"` (evidence_score < 0.45 or safety gates failed)
+   * **FALLBACK MODE** (if hybrid_decision missing or incomplete):
+     - **BUY** if `stats_significant=true` **and** `economics.net_median > 0` **and** `economics.blocked=false` **and** `plan.policy_ok=true`.
+     - **REVIEW** if `stats_significant=true` but fails **one** of {net_median>0, blocked=false, policy_ok=true}.
+     - **SKIP** otherwise.
 
 4. **Best horizon selection (if S non-empty)**
    * Pick horizon with **lowest q**; tiebreakers: higher `effect_bps` → longer `H`.
@@ -187,13 +231,30 @@ For each evidence entry in `evidence[]`, explain:
 - If net_median ≤ 0: "Expected returns of [net_median]% are not positive after trading costs - this trade is unprofitable"
 - If net_median > 0: "Expected returns of [net_median]% exceed trading costs - this trade is profitable"
 
-**EXECUTIVE SUMMARY STRUCTURE** (200+ words for BUY/REVIEW, 150+ for SKIP):
+**SOCIAL & ALTERNATIVE SIGNALS**:
+- If `social_signals.meme` exists, interpret meme level (LOW/MED/HIGH), z_score, and what it means for crowd activity or headline risk.
+- If `social_signals.sentiment` exists, translate total_mentions, bull_ratio vs bear_ratio, and whether sentiment supports or fights the trade.
+- If social signals are absent, record that they were not available and keep tone factual.
+
+**EXECUTIVE SUMMARY STRUCTURE** (200+ words for BUY/REVIEW/REACTIVE, 150+ for SKIP):
 1. **Opening**: "We tested the EMA crossover pattern for [ticker]..."
 2. **Pattern Status**: "The pattern is [present/weak/absent] (drivers.pattern = [value])..."
-3. **Statistical Results**: "The statistical tests show [reliable/unreliable] because [specific p/q/effect interpretation]..."
-4. **Economics**: "After accounting for trading costs, [net_median interpretation]..."
-5. **Decision**: "Therefore, we [BUY/REVIEW/SKIP] because [specific evidence from above]..."
-6. **Action**: "You should [action] because [reason]. [What to watch/avoid]..."
+3. **Window Extension** (if window_extension exists - CHECK THIS FIRST):
+   - "We detected [current_events] valid crossover events over [current_window_days] days, but need at least [required_events] events to run reliable statistical tests."
+   - "The current time window is too short. Extend the analysis to [recommended_window_days] days to gather more events."
+   - "To fix this: Update WINDOW_DAYS = [recommended_window_days] in Cell 2, then re-run from Cell 6 onwards."
+   - "This is why statistical tests (p-values, q-values) are null - they were skipped due to insufficient sample size, not because the analysis failed."
+4. **Hybrid Evidence** (if hybrid_decision exists):
+   - "Our hybrid decision framework scored this opportunity at [evidence_score]/1.0, based on:"
+   - "Stats edge ([S score], [weight%]), Flow/participation ([F score], [weight%]), Regime alignment ([R score], [weight%]), [etc]"
+   - "Safety gates: [list which passed/failed]"
+4. **Statistical Results**: "The statistical tests show [reliable/unreliable] because [specific p/q/effect interpretation]..."
+5. **Economics**: "After accounting for trading costs, [net_median interpretation]..."
+6. **Decision**: "Therefore, we [BUY/REACTIVE/SKIP] because [specific evidence from above]..."
+7. **Action/Playbook** (if hybrid_decision.playbook_type exists):
+   - For BUY: "Use the Swing Playbook: [entry/risk/target/hold details]"
+   - For REACTIVE: "Use the Reactive Playbook: [entry/risk/target/hold details with size reduction warning]"
+   - For SKIP: "You should not trade this because [reason]. [What to watch for future opportunities]..."
 
 Requested ticker: {contract.get('ticker', 'UNKNOWN')}
 
@@ -201,12 +262,14 @@ analysis_contract:
 {contract_str}
 
 OUTPUT SCHEMA (strict):
+**CRITICAL**: Output must be valid JSON. Do NOT include literal newlines or control characters in string values. Use spaces instead of newlines within text.
+
 {{
   "ticker": "string",
   "run_id": "string",
   "verdict": "BUY | REVIEW | SKIP",
   "reason_code": "string",
-  "executive_summary": "string (200+ words for BUY/REVIEW, 150+ for SKIP, must explain pattern, stats, economics, decision, and action)",
+  "executive_summary": "string (200+ words for BUY/REVIEW, 150+ for SKIP, must explain pattern, stats, economics, decision, and action - use spaces, not newlines)",
   "decision": {{
     "best_horizon": "number|null",
     "q_value": "number|null",
@@ -237,8 +300,13 @@ FIELD MAPPING:
 - evidence: contract.evidence[] (array with H, effect, ci, p, q)
 - economics: contract.economics (net_median, net_p90, blocked)
 - plan: contract.plan (entry_price, stop_price, target_price, risk_reward, policy_ok)
+- hybrid_decision: contract.hybrid_decision (verdict, evidence_score, components, safety_gates, playbook_type, playbooks, thresholds)
+  - components: dict with keys 'S', 'F', 'R', 'C', 'M' (scores 0-1)
+  - safety_gates: dict with keys 'liquidity_ok', 'capacity_ok', 'spread_ok', 'impact_ok', 'data_healthy', 'overall_pass'
+  - playbooks: dict with keys 'swing', 'reactive' containing entry, risk_atr_mult, target_rr, hold_days, size_pct
 - drivers: contract.drivers (pattern, iv_rv, meme, sector_rs if present)
 - risks: contract.risks[] (array of risk strings)
+- social_signals: contract.social_signals (meme and sentiment snapshots)
 
 DECISION RULES:
 1. Find horizons with q < 0.10 AND effect_bps ≥ 30 (effect * 10000)
@@ -308,13 +376,29 @@ async def summarize_contract(contract: Dict[str, Any]) -> Dict[str, Any]:
                 if json_end:
                     response_text = "\n".join(lines[json_start:json_end])
         
-        # Parse JSON response
+        # Clean response text (remove control characters that break JSON)
+        # Replace literal newlines, tabs, and control chars within string values
+        import re
+        # First, try to parse as-is
         try:
             summary = json.loads(response_text)
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse LLM response as JSON: {e}")
-            logger.error(f"Response text (first 1000 chars): {response_text[:1000]}")
-            raise ValueError(f"LLM returned invalid JSON: {e}. Response preview: {response_text[:200]}")
+            logger.warning(f"Initial JSON parse failed: {e}. Attempting to clean response...")
+            # Clean control characters (but preserve JSON structure)
+            # Replace unescaped newlines and tabs within strings
+            cleaned_text = response_text
+            # Replace control characters (ASCII 0-31 except \n, \r, \t which should be escaped)
+            cleaned_text = re.sub(r'[\x00-\x08\x0b-\x0c\x0e-\x1f]', '', cleaned_text)
+            # Try to fix common issues: unescaped newlines in strings
+            # This is tricky - we don't want to break JSON structure, just fix string content
+            try:
+                summary = json.loads(cleaned_text)
+                logger.info("Successfully parsed after cleaning control characters")
+            except json.JSONDecodeError as e2:
+                logger.error(f"Failed to parse LLM response as JSON even after cleaning: {e2}")
+                logger.error(f"Original response (first 1000 chars): {response_text[:1000]}")
+                logger.error(f"Cleaned response (first 1000 chars): {cleaned_text[:1000]}")
+                raise ValueError(f"LLM returned invalid JSON: {e2}. Response preview: {response_text[:200]}")
         
         # Validate summary structure (v2 schema)
         required_summary_fields = ['ticker', 'run_id', 'verdict', 'executive_summary', 'decision', 'action', 'rationale', 'risks']
