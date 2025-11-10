@@ -17,8 +17,17 @@ logger = logging.getLogger(__name__)
 # --- Updated for Anthropic Claude ---
 API_URL = "https://api.anthropic.com/v1/messages"
 API_KEY = os.getenv("ANTHROPIC_API_KEY")
-MODEL_NAME = "claude-3-5-sonnet-20240620" # Using Sonnet for detailed analysis (better than Haiku)
+# Strip quotes if present (some .env files have quotes around values)
+if API_KEY:
+    API_KEY = API_KEY.strip('"').strip("'")
+MODEL_NAME = "claude-3-sonnet-20240229" # Using Sonnet for detailed analysis (better than Haiku)
 MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "2"))
+
+# Debug logging for API key (first/last chars only for security)
+if API_KEY:
+    logger.info(f"ANTHROPIC_API_KEY loaded (length: {len(API_KEY)}, starts: {API_KEY[:10]}...)")
+else:
+    logger.error("ANTHROPIC_API_KEY not found in environment")
 
 # Import policy constants for LLM template
 from services.policy.validators import (
