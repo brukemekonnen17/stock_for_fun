@@ -28,6 +28,8 @@ from services.broker.base import OrderRequest
 from services.broker.etrade_oauth import request_token as et_request_token, exchange_token as et_exchange_token
 from apps.api.schemas import WhySelected, CatalystInfo, StrategyRationale, MarketContext, PerfStats, NewsItem
 from apps.api.schemas_base import StrictModel
+from apps.api.schemas_summarizer import SummarizeRequest, SummaryResponse
+from services.llm.summarizer import summarize_contract, load_contract_from_file
 from services.analysis.explain import (
     catalyst_from_payload,
     compute_market_context,
@@ -273,6 +275,69 @@ def features():
         "safeMode": f["SAFE_MODE"],
         "useLlmV2": f["ENABLE_LLM_PHASE1"],
     }
+
+# M1: LLM Summary Service
+@app.post("/summarize", response_model=SummaryResponse)
+async def summarize(request: SummarizeRequest):
+    """
+    Summarize an analysis_contract.json into structured narrative.
+    
+    Takes either:
+    - contract: Direct JSON object
+    - file_path: Path to analysis_contract.json file
+    
+    Returns executive summary, decision rationale, risks, and action template.
+    """
+    try:
+        # Load contract
+        if request.contract:
+            contract = request.contract
+        elif request.file_path:
+            # Resolve relative paths from project root
+            if not os.path.isabs(request.file_path):
+                contract_path = os.path.join(project_dir, request.file_path)
+            else:
+                contract_path = request.file_path
+            contract = load_contract_from_file(contract_path)
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Either 'contract' or 'file_path' must be provided"
+            )
+        
+        # Validate required fields
+        required_fields = ['ticker', 'verdict', 'evidence', 'economics', 'plan']
+        missing = [f for f in required_fields if f not in contract]
+        if missing:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Contract missing required fields: {missing}"
+            )
+        
+        # Generate summary
+        summary = await summarize_contract(contract)
+        
+        # Validate response schema
+        try:
+            validated = SummaryResponse(**summary)
+            return validated
+        except Exception as e:
+            logger.error(f"Summary validation failed: {e}")
+            logger.error(f"Summary: {summary}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Summary validation failed: {str(e)}"
+            )
+            
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in /summarize: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to generate summary: {str(e)}")
 
 @app.get("/events/upcoming")
 def upcoming(days: int = 14, db: Session = Depends(get_db)):
