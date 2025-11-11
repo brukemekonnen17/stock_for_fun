@@ -15,7 +15,7 @@ class DecisionData(BaseModel):
     """Decision evidence and gates"""
     best_horizon: Optional[int] = Field(None, description="Best horizon (lowest q with effect≥30bps)")
     q_value: Optional[float] = Field(None, description="FDR-corrected q-value")
-    effect_bps: Optional[int] = Field(None, description="Effect size in basis points")
+    effect_bps: Optional[float] = Field(None, description="Effect size in basis points")
     ci_95: CIData = Field(..., description="95% confidence interval")
     economics_ok: bool = Field(..., description="Net median > 0 and not blocked")
     adv_ok: Optional[bool] = Field(None, description="ADV check passed")
@@ -42,7 +42,7 @@ class SummaryResponseV2(BaseModel):
     """Response schema for /summarize endpoint (v2 - Hardline)"""
     ticker: str = Field(..., description="Stock ticker")
     run_id: str = Field(..., description="Deterministic run ID")
-    verdict: Literal["BUY", "REVIEW", "SKIP"] = Field(..., description="Final verdict")
+    verdict: Literal["BUY", "REVIEW", "SKIP", "REACTIVE"] = Field(..., description="Final verdict")
     reason_code: str = Field(..., description="Reason code (e.g., STATS_WEAK, ECON_VETO)")
     executive_summary: str = Field(
         ...,
