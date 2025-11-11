@@ -469,7 +469,7 @@ OUTPUT SCHEMA (strict):
     "best_horizon": "number|null",
     "q_value": "number|null",
     "effect_bps": "number|null",
-    "ci_95": {{ "lower": "number|null", "upper": "number|null", "source": "contract|conservative|null" }},
+    "ci_95": {{ "lower": "number|null", "upper": "number|null", "source": "contract|conservative|null (MUST be one of these three, no other values allowed)" }},
     "economics_ok": "boolean",
     "adv_ok": "boolean",
     "veto": "YES|NO|null"
@@ -536,6 +536,9 @@ FIELD MAPPING:
 - drivers: contract.drivers (pattern, iv_rv, meme, sector_rs if present)
 - risks: contract.risks[] (array of risk strings)
 - social_signals: contract.social_signals (meme and sentiment snapshots)
+
+**CRITICAL FIELD CONSTRAINTS**:
+- decision.ci_95.source: MUST be exactly one of: "contract", "conservative", or null. Do NOT use "standard", "normal", "default", or any other value. If CI comes from contract evidence, use "contract". If ci_unstable flag is set, use "conservative". Otherwise use null.
 
 **GUARDRAILS (Hard Rules - Apply BEFORE any emotion/judgment)**:
 - **BUY requires ALL**: q < 0.10 AND effect_bps ≥ 30 AND economics.blocked = false AND spread_bps ≤ 50 AND impact_bps ≤ 20 AND adv_ok = true
@@ -795,6 +798,19 @@ async def summarize_contract(contract: Dict[str, Any]) -> Dict[str, Any]:
                             end = min(len(cleaned_text), e4.pos + 50)
                             logger.error(f"Problem area: {cleaned_text[start:end]}")
                         raise ValueError(f"LLM returned invalid JSON: {e4}. Response preview: {response_text[:200]}")
+        
+        # Fix invalid ci_95.source values (transform to allowed values)
+        if 'decision' in summary and 'ci_95' in summary.get('decision', {}):
+            ci_source = summary['decision']['ci_95'].get('source')
+            allowed_sources = ['contract', 'conservative', None]
+            if ci_source not in allowed_sources:
+                # Map invalid values to valid ones
+                if ci_source in ['standard', 'normal', 'default', 'default_ci']:
+                    logger.warning(f"Transforming invalid ci_95.source '{ci_source}' to 'contract'")
+                    summary['decision']['ci_95']['source'] = 'contract'
+                else:
+                    logger.warning(f"Transforming unknown ci_95.source '{ci_source}' to None")
+                    summary['decision']['ci_95']['source'] = None
         
         # Validate summary structure (v2 schema)
         required_summary_fields = ['ticker', 'run_id', 'verdict', 'executive_summary', 'decision', 'action', 'rationale', 'risks', 'trader_lens', 'analyst_lens', 'emotion_layer']
