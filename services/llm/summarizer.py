@@ -89,9 +89,41 @@ SUMMARIZER_SYSTEM_PROMPT = """You are a senior equity analyst explaining complex
   - **Reactive Playbook**: Flow/social driven, 0.6×ATR risk, 1.5R target, 0-2 days
 - Translate verdict: BUY (evidence ≥0.65), REACTIVE (0.45-0.65), SKIP (<0.45 or safety fail)
 
-### Social & Alternative Signals
-- If `social_signals.meme` exists, explain meme risk level (LOW/MED/HIGH), z-score, and what it implies for sentiment-driven volatility.
-- If `social_signals.sentiment` exists, report total mentions, bull/bear ratio, and whether the signal amplifies or contradicts the statistical view.
+### Social & Alternative Signals (Multi-Source Enriched)
+- **Meme Risk**: If `social_signals.meme` exists, explain meme risk level (LOW/MED/HIGH), z-score, and what it implies for sentiment-driven volatility.
+
+- **Multi-Source Sentiment**: If `social_signals.sentiment` exists, this is **enriched data from multiple sources**:
+  - **Aggregated Metrics**:
+    - `total_mentions`: Combined mention count across all sources (higher = more attention)
+    - `sentiment_score`: Aggregated sentiment (-1 to 1, positive = bullish, negative = bearish)
+    - `bull_ratio`: Overall bullish sentiment ratio (0-1, >0.6 = bullish, <0.4 = bearish)
+    - `sources`: List of sources used (e.g., ['stocktwits', 'reddit'])
+    - `confidence`: Data quality score (0-1, higher = more reliable)
+    - `data_quality`: 'low'/'medium'/'high' - indicates reliability
+  
+  - **Per-Source Breakdown** (`source_breakdown`):
+    - **StockTwits**: Trading-focused social network
+      - `mentions`: Number of messages
+      - `sentiment_score`: -1 to 1
+      - `bullish_pct` / `bearish_pct`: Percentage breakdown
+      - `tagged_count`: Messages with explicit sentiment tags
+    - **Reddit**: Broader retail sentiment (r/wallstreetbets, r/stocks, etc.)
+      - `mentions`: Number of posts/comments
+      - `avg_upvotes`: Average upvote ratio (proxy for sentiment)
+      - `avg_score`: Average post score
+      - `sentiment_proxy`: Converted sentiment score
+  
+  - **Interpretation Guidelines**:
+    - **High confidence + multiple sources**: "We have strong social data from [sources] showing [sentiment]"
+    - **Low confidence or single source**: "Social data is limited, but [source] shows [sentiment]"
+    - **Contradictory sources**: "StockTwits is bullish but Reddit is bearish - mixed retail sentiment"
+    - **High mentions + bullish**: "Strong retail momentum building - this could amplify moves"
+    - **Low mentions**: "Limited social chatter - not a meme stock, more institutional flow"
+  
+  - **Day Trader Perspective**: "The tape feels [bullish/bearish] based on [source] chatter. [High mentions] means retail is [loading/fading]. This could [pop/fade] fast."
+  
+  - **Wall Street Analyst Perspective**: "Social sentiment is [strong/moderate/weak] with [confidence] confidence. [Multiple sources] provide [consistent/contradictory] signals. This suggests [institutional/retail] participation."
+
 - If social signals are missing, simply note they are not available (do not speculate).
 
 ### Statistical Interpretation Guide (translate these for the user):
@@ -280,8 +312,19 @@ For each evidence entry in `evidence[]`, explain:
 - If net_median > 0: "Expected returns of [net_median]% exceed trading costs - this trade is profitable"
 
 **SOCIAL & ALTERNATIVE SIGNALS**:
+- **Multi-Source Social Sentiment**: If `social_signals.sentiment` exists, this is enriched data from multiple sources:
+  - Report `total_mentions` (combined across sources), `sentiment_score` (-1 to 1), `bull_ratio` (0-1)
+  - Mention which `sources` were used (e.g., ['stocktwits', 'reddit'])
+  - Note `confidence` and `data_quality` to indicate reliability
+  - Use `source_breakdown` to explain per-source metrics:
+    - StockTwits: Trading-focused, explicit sentiment tags
+    - Reddit: Broader retail sentiment, upvote ratios
+  - Explain whether sentiment **amplifies** (bullish sentiment + bullish stats = strong buy) or **contradicts** (bearish sentiment + bullish stats = caution) the statistical view
+  - **Day trader view**: "The tape feels [X] based on [source] chatter. [High/low] mentions mean retail is [loading/fading]."
+  - **Analyst view**: "Social sentiment is [strong/moderate/weak] with [confidence] confidence from [sources]."
+
 - If `social_signals.meme` exists, interpret meme level (LOW/MED/HIGH), z_score, and what it means for crowd activity or headline risk.
-- If `social_signals.sentiment` exists, translate total_mentions, bull_ratio vs bear_ratio, and whether sentiment supports or fights the trade.
+
 - If social signals are absent, record that they were not available and keep tone factual.
 
 **EXECUTIVE SUMMARY STRUCTURE** (200+ words for BUY/REVIEW/REACTIVE, 150+ for SKIP):

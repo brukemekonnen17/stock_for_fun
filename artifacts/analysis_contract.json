@@ -1,9 +1,9 @@
 {
-  "analysis_id": "747ed91a-9d84-4c02-ba96-a17647b0cece",
-  "run_id": "2d48b24ed2bb1057",
-  "ticker": "AAPL",
-  "window_days": 365,
-  "timestamp": "2025-11-10T13:23:03.544392",
+  "analysis_id": "4d588eea-d5f5-4445-a662-3351ef3faa74",
+  "run_id": "fc1585d0dfe4ec54",
+  "ticker": "NVDA",
+  "window_days": 730,
+  "timestamp": "2025-11-10T20:12:43.371105",
   "drivers": {
     "pattern": "GREEN",
     "sector_rs": "+",
@@ -17,7 +17,9 @@
       "effect": null,
       "ci": null,
       "p": null,
-      "q": null
+      "q": null,
+      "hit_rate": null,
+      "n_events": 5
     },
     {
       "test": "EMA_Crossover",
@@ -25,7 +27,9 @@
       "effect": null,
       "ci": null,
       "p": null,
-      "q": null
+      "q": null,
+      "hit_rate": null,
+      "n_events": 5
     },
     {
       "test": "EMA_Crossover",
@@ -33,7 +37,9 @@
       "effect": null,
       "ci": null,
       "p": null,
-      "q": null
+      "q": null,
+      "hit_rate": null,
+      "n_events": 5
     },
     {
       "test": "EMA_Crossover",
@@ -41,7 +47,9 @@
       "effect": null,
       "ci": null,
       "p": null,
-      "q": null
+      "q": null,
+      "hit_rate": null,
+      "n_events": 5
     },
     {
       "test": "EMA_Crossover",
@@ -49,28 +57,87 @@
       "effect": null,
       "ci": null,
       "p": null,
-      "q": null
+      "q": null,
+      "hit_rate": null,
+      "n_events": 5
+    },
+    {
+      "test": "EMA_Crossover",
+      "H": 1,
+      "effect": null,
+      "ci": null,
+      "p": null,
+      "q": null,
+      "hit_rate": null,
+      "n_events": 7
+    },
+    {
+      "test": "EMA_Crossover",
+      "H": 3,
+      "effect": null,
+      "ci": null,
+      "p": null,
+      "q": null,
+      "hit_rate": null,
+      "n_events": 7
+    },
+    {
+      "test": "EMA_Crossover",
+      "H": 5,
+      "effect": null,
+      "ci": null,
+      "p": null,
+      "q": null,
+      "hit_rate": null,
+      "n_events": 7
+    },
+    {
+      "test": "EMA_Crossover",
+      "H": 10,
+      "effect": null,
+      "ci": null,
+      "p": null,
+      "q": null,
+      "hit_rate": null,
+      "n_events": 7
+    },
+    {
+      "test": "EMA_Crossover",
+      "H": 20,
+      "effect": null,
+      "ci": null,
+      "p": null,
+      "q": null,
+      "hit_rate": null,
+      "n_events": 7
     }
   ],
   "economics": {
     "net_median": null,
     "net_p90": null,
-    "blocked": true
+    "blocked": false,
+    "spread_bps_quote": 7.0,
+    "slippage_bps_quote": 2.0,
+    "slippage_bps_atr": 50.0,
+    "total_cost_bps": 55.0,
+    "impact_bps": 5.366905125412473,
+    "impact_veto": false,
+    "adv_ok": true
   },
   "plan": {
-    "entry_price": 268.47,
-    "stop_price": 258.6313,
-    "target_price": 283.22805000000005,
-    "stop_pct": -3.664729764964436,
-    "target_pct": 5.497094647446654,
-    "atr_used": 4.9193500000000006,
-    "worst_entry": 268.657929,
-    "worst_exit": 258.45025809,
-    "worst_loss_pct": -3.7995048007684322,
-    "worst_loss_abs": 10.207670910000047,
-    "risk_reward": 1.5,
+    "entry_price": 199.05,
+    "stop_price": 182.7893142857143,
+    "target_price": 223.44102857142857,
+    "stop_pct": -8.169146302077724,
+    "target_pct": 12.253719453116574,
+    "atr_used": 8.130342857142855,
+    "worst_entry": 199.189335,
+    "worst_exit": 182.6613617657143,
+    "worst_loss_pct": -8.297619565970084,
+    "worst_loss_abs": 16.527973234285696,
+    "risk_reward": 1.5000000000000009,
     "total_cost_bps": 7.0,
-    "policy_ok": true
+    "policy_ok": false
   },
   "risks": [
     "Net returns not positive after costs",
@@ -79,11 +146,138 @@
   ],
   "why_now": "Review conditions.",
   "verdict": "YELLOW",
+  "score": 0.0,
+  "best_evidence": {
+    "horizon": 1,
+    "effect_bps": null,
+    "effect_floor_pass": null,
+    "n_events": 7,
+    "limited_power": true,
+    "significance_reason": null,
+    "significance_chip": null,
+    "ci_source": "standard",
+    "ci_unstable": null,
+    "hit_rate": null,
+    "significant": null
+  },
+  "car_ci": "N/A",
+  "social_signals": {
+    "meme": {
+      "meme_level": "MED",
+      "z_score": 1.0,
+      "mention_count": 30,
+      "sentiment_score": 0.0,
+      "p_value": 0.00041923696954104805,
+      "q_value": 0.00041923696954104805,
+      "significant": "True"
+    },
+    "sentiment": {
+      "source": "reddit",
+      "total_mentions": 14,
+      "bull_ratio": 0.5,
+      "bear_ratio": null,
+      "reddit_mentions": 14,
+      "stocktwits_mentions": 0
+    }
+  },
+  "signals": {
+    "ema_crossover": {
+      "signal": "ema_crossover",
+      "verdict": "REVIEW",
+      "rationale": "Limited power (n < 20)",
+      "best_H": 1,
+      "effect_g": null,
+      "hl_diff_bps": null,
+      "cliff_delta": null,
+      "bayes_pr_pos": null,
+      "perm_p": null,
+      "ci_95": "N/A",
+      "p": null,
+      "q": null,
+      "hit": null,
+      "net_median": null,
+      "net_p90": null,
+      "n_events": 7,
+      "limited_power": true,
+      "gates": {
+        "q_gate": false,
+        "hl_gate": false,
+        "delta_gate": false,
+        "bayes_gate": false,
+        "perm_gate": true,
+        "net_gate": false,
+        "impact_gate": true,
+        "limited_power": true
+      }
+    },
+    "breakout_10d": {
+      "signal": "breakout_10d",
+      "verdict": "REVIEW",
+      "rationale": "Limited power (n < 20)",
+      "best_H": 1,
+      "effect_g": null,
+      "hl_diff_bps": null,
+      "cliff_delta": null,
+      "bayes_pr_pos": null,
+      "perm_p": null,
+      "ci_95": "N/A",
+      "p": null,
+      "q": null,
+      "hit": null,
+      "net_median": null,
+      "net_p90": null,
+      "n_events": 5,
+      "limited_power": true,
+      "gates": {
+        "q_gate": false,
+        "hl_gate": false,
+        "delta_gate": false,
+        "bayes_gate": false,
+        "perm_gate": true,
+        "net_gate": false,
+        "impact_gate": true,
+        "limited_power": true
+      }
+    }
+  },
+  "hybrid_decision": {
+    "verdict": "SKIP",
+    "evidence_score": 0.23252764382704139,
+    "components": {
+      "S": 0.0,
+      "F": 0.1376382191352068,
+      "R": 0.4,
+      "C": 0.5,
+      "M": 0.75
+    },
+    "weights": {
+      "stats": 0.4,
+      "flow": 0.2,
+      "regime": 0.2,
+      "catalyst": 0.1,
+      "social": 0.1
+    },
+    "safety_gates": {
+      "liquidity_ok": false,
+      "capacity_ok": false,
+      "spread_ok": true,
+      "impact_ok": true,
+      "data_healthy": false,
+      "overall_pass": false
+    },
+    "playbook_type": null,
+    "playbooks": {},
+    "thresholds": {
+      "buy": 0.65,
+      "reactive": 0.45
+    }
+  },
   "artifacts": {
     "candles_html": "artifacts/candles.html",
     "candles_png": "artifacts/candles.png",
     "car_chart_html": "artifacts/car_chart.html",
     "net_returns_dist_html": "artifacts/net_returns_dist.html",
     "investor_card_json": "artifacts/investor_card.json"
-  }
+  },
+  "window_extension": null
 }

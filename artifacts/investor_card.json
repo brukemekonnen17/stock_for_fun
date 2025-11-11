@@ -1,6 +1,6 @@
 {
   "ticker": "AAPL",
-  "timestamp": "2025-11-10 13:23:03",
+  "timestamp": "2025-11-10 14:19:02",
   "run_id": "2d48b24ed2bb1057",
   "verdict": "REVIEW",
   "score": 0.0,
@@ -20,13 +20,13 @@
     "p_value": null,
     "q_value": null,
     "hit_rate": null,
-    "n_events": 2,
+    "n_events": 4,
     "limited_power": true,
-    "effect_bps": 84.76151347323824,
+    "effect_bps": 50.71043337018355,
     "effect_floor_pass": true,
     "significant": false,
     "significance_chip": "YELLOW",
-    "significance_reason": "Limited power (n=2 < 20)"
+    "significance_reason": "Limited power (n=4 < 20)"
   },
   "plan": {
     "entry": 268.47,
