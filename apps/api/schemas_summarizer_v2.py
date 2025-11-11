@@ -78,9 +78,9 @@ class SummaryResponseV2(BaseModel):
     risks: List[RiskItem] = Field(..., min_items=1, description="Risks with citations")
     citations: List[str] = Field(..., description="All contract paths cited")
     omissions: List[str] = Field(default_factory=list, description="Missing fields noted")
-    trader_lens: Optional[TraderLens] = Field(None, description="Intraday trader perspective")
-    analyst_lens: Optional[AnalystLens] = Field(None, description="Professional analyst perspective")
-    emotion_layer: Optional[EmotionLayer] = Field(None, description="Emotion/social sentiment layer")
+    trader_lens: TraderLens = Field(..., description="Intraday trader perspective (REQUIRED)")
+    analyst_lens: AnalystLens = Field(..., description="Professional analyst perspective (REQUIRED)")
+    emotion_layer: EmotionLayer = Field(..., description="Emotion/social sentiment layer (REQUIRED)")
     
     class Config:
         json_schema_extra = {
@@ -114,7 +114,45 @@ class SummaryResponseV2(BaseModel):
                     {"risk": "CAR does not support signal.", "paths": ["evidence[*].q", "evidence[*].ci"]}
                 ],
                 "citations": ["evidence[*].q", "evidence[*].effect", "economics.net_median", "economics.blocked"],
-                "omissions": ["No statistical evidence available; all horizons have null q/effect/ci"]
+                "omissions": ["No statistical evidence available; all horizons have null q/effect/ci"],
+                "trader_lens": {
+                    "tone": "cautious",
+                    "playbook": {
+                        "trigger": "Volume surge ≥1.5× 5d median AND EMA crossover confirmed",
+                        "size_rule": "0.5× base size for REACTIVE",
+                        "stop": "entry - 0.6×ATR(14)",
+                        "target": "entry + 1.0×ATR(14)",
+                        "time_stop": "Exit by T+2 if R<0.8",
+                        "invalidation": "15m close < VWAP AND vol_ratio<1.0 for 2 bars"
+                    },
+                    "what_to_watch": [
+                        "Volume sustain ≥1.4× for 3 bars",
+                        "VWAP holds on ≤0.2×ATR pullbacks",
+                        "Social sentiment momentum"
+                    ],
+                    "short_term_verdict": "NO",
+                    "short_term_reason": "Weak stats and no flow/social momentum for quick move"
+                },
+                "analyst_lens": {
+                    "tone": "measured",
+                    "thesis": "Setup is not investable: q-values all >0.10, effect sizes insufficient, economics blocked. No statistical edge validated.",
+                    "risks": [
+                        "Statistical edge not validated (q>0.10)",
+                        "Costs overwhelm effect (net_median≤0)",
+                        "Insufficient sample size"
+                    ],
+                    "conditions_to_upgrade": [
+                        "q<0.10 and effect≥30bps on next run",
+                        "improve net_median_bps > 0 after costs",
+                        "increase sample size to n≥20 events"
+                    ]
+                },
+                "emotion_layer": {
+                    "social_z": 0.0,
+                    "applied_weight": 0.10,
+                    "narrative_bias": "low social attention",
+                    "discipline": "Emotion can tilt REACTIVE sizing but cannot override econ gates"
+                }
             }
         }
 

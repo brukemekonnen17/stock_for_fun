@@ -403,7 +403,9 @@ For each evidence entry in `evidence[]`, explain:
 6. **Statistical Results**: "The statistical tests show [reliable/unreliable] because [specific p/q/effect interpretation]..."
 7. **Economics**: "After accounting for trading costs, [net_median interpretation]..."
 8. **SHORT-TERM/INTRADAY OPPORTUNITY ASSESSMENT** (CRITICAL - STANDALONE SECTION):
-   **This MUST be a prominent, separate section with clear YES/NO verdict.**
+   **This MUST be a prominent, visually distinct section in the executive summary. Format it with clear separators.**
+   
+   **Formatting**: Start this section with a clear header like "=== SHORT-TERM/INTRADAY OPPORTUNITY ASSESSMENT ===" or use bold formatting to make it stand out.
    
    **Question**: "Even if statistical evidence is weak, does this setup make sense for a short-term trade (1-2 days) or intraday scalp?"
    
@@ -417,9 +419,11 @@ For each evidence entry in `evidence[]`, explain:
    - **Day Trader**: "As a day trader, I see [opportunity/no opportunity] here because [specific reason: volume surge, social momentum, pattern timing, etc.]. This [could/couldn't] be a quick scalp for [X]% gain with tight stops."
    - **Analyst**: "From an institutional view, weak stats mean [no edge/limited edge], but [flow/social/regime] factors suggest [short-term opportunity exists/doesn't exist]."
    
-   **VERDICT (Must be explicit YES or NO)**:
+   **VERDICT (Must be explicit YES or NO - make this VERY prominent)**:
    - **If YES**: "✅ SHORT-TERM OPPORTUNITY: While statistical evidence is weak, this setup could work for a SHORT-TERM trade (1-2 days) or intraday scalp because [volume/social/flow/regime reasons]. Use tight stops (0.6×ATR), quick profit-taking (1.0×ATR target), and exit by T+2 if not working."
    - **If NO**: "❌ NO SHORT-TERM OPPORTUNITY: Even for short-term trading, this setup doesn't make sense because [volume is low/social momentum is weak/regime doesn't support/pattern timing is off]. Skip even for intraday."
+   
+   **CRITICAL**: This verdict MUST also be reflected in `trader_lens.short_term_verdict` (YES/NO) and `trader_lens.short_term_reason` in the JSON output.
 9. **Decision**: "Therefore, we [BUY/REACTIVE/SKIP] because [specific evidence from above, including social sentiment and short-term assessment if relevant]..."
 10. **Action/Playbook** (if hybrid_decision.playbook_type exists):
    - For BUY: "Use the Swing Playbook: [entry/risk/target/hold details]"
@@ -504,6 +508,8 @@ OUTPUT SCHEMA (strict):
   }}
 }}
 
+**CRITICAL**: trader_lens, analyst_lens, and emotion_layer are REQUIRED fields. You MUST populate all three in your JSON output.
+
 FIELD MAPPING:
 - ticker, run_id, timestamp: contract root level
 - evidence: contract.evidence[] (array with H, effect, ci, p, q)
@@ -534,9 +540,9 @@ DECISION RULES:
 5. REACTIVE if: stats are weak BUT (flow_score≥0.60 OR social.z≥1.5) AND capacity within limits AND not blocked
 6. SKIP otherwise (including if blocked=true)
 
-**DUAL-LENS OUTPUT REQUIREMENTS** (MUST populate all three):
+**DUAL-LENS OUTPUT REQUIREMENTS** (MANDATORY - MUST populate all three - these are REQUIRED fields):
 
-**trader_lens** (Intraday trader perspective - decisive, actionable):
+**trader_lens** (Intraday trader perspective - decisive, actionable) - **REQUIRED**:
 - **tone**: "decisive" for strong setups, "cautious" for weak, "aggressive" for high-conviction
 - **playbook**: Provide concrete, executable rules:
   - **trigger**: Specific entry condition (e.g., "Volume surge ≥1.5× 5d median AND EMA crossover confirmed")
@@ -549,17 +555,19 @@ DECISION RULES:
 - **short_term_verdict**: "YES" or "NO" - explicit answer to "Does this work for 1-2 day trade or intraday scalp?"
 - **short_term_reason**: Clear explanation of why YES or NO
 
-**analyst_lens** (Professional analyst perspective - measured, risk-adjusted):
+**analyst_lens** (Professional analyst perspective - measured, risk-adjusted) - **REQUIRED**:
 - **tone**: "measured" for balanced view, "cautious" for weak evidence, "confident" for strong evidence
 - **thesis**: Explain why setup is (not) investable based on q-value, effect_bps, capacity, economics
 - **risks**: List 3-5 key risks (e.g., "Statistical edge not validated (q>0.10)", "Costs overwhelm effect", "Flow reversals")
 - **conditions_to_upgrade**: List what would need to change to upgrade verdict (e.g., "q<0.10 and effect≥30bps on next run", "improve net_median_bps > 0 after costs")
 
-**emotion_layer** (Emotion/social sentiment - acknowledged but clipped):
+**emotion_layer** (Emotion/social sentiment - acknowledged but clipped) - **REQUIRED**:
 - **social_z**: Use meme_result.z_score if available, else null
 - **applied_weight**: Clip social weight to ≤0.15 (use min(0.15, weights.social) from hybrid_decision if available)
 - **narrative_bias**: One-line summary of social sentiment (e.g., "moderate bullish chatter", "high retail attention")
 - **discipline**: MUST include verbatim: "Emotion can tilt REACTIVE sizing but cannot override econ gates"
+
+**CRITICAL**: All three fields (trader_lens, analyst_lens, emotion_layer) are REQUIRED in the JSON output. Do not omit them.
 
 **CRITICAL**: Translate all statistical terms into plain language. Explain what the user can't see. Make it actionable.
 
@@ -726,10 +734,25 @@ async def summarize_contract(contract: Dict[str, Any]) -> Dict[str, Any]:
                         raise ValueError(f"LLM returned invalid JSON: {e4}. Response preview: {response_text[:200]}")
         
         # Validate summary structure (v2 schema)
-        required_summary_fields = ['ticker', 'run_id', 'verdict', 'executive_summary', 'decision', 'action', 'rationale', 'risks']
+        required_summary_fields = ['ticker', 'run_id', 'verdict', 'executive_summary', 'decision', 'action', 'rationale', 'risks', 'trader_lens', 'analyst_lens', 'emotion_layer']
         missing = [f for f in required_summary_fields if f not in summary]
         if missing:
-            raise ValueError(f"Summary missing required fields: {missing}")
+            raise ValueError(f"Summary missing required fields: {missing}. All dual-lens fields (trader_lens, analyst_lens, emotion_layer) are REQUIRED.")
+        
+        # Validate dual-lens fields are not None/empty
+        if not summary.get('trader_lens'):
+            raise ValueError("trader_lens is REQUIRED but missing or empty")
+        if not summary.get('analyst_lens'):
+            raise ValueError("analyst_lens is REQUIRED but missing or empty")
+        if not summary.get('emotion_layer'):
+            raise ValueError("emotion_layer is REQUIRED but missing or empty")
+        
+        # Validate trader_lens has required sub-fields
+        trader_lens = summary.get('trader_lens', {})
+        if 'short_term_verdict' not in trader_lens or trader_lens.get('short_term_verdict') not in ['YES', 'NO']:
+            raise ValueError("trader_lens.short_term_verdict must be 'YES' or 'NO'")
+        if 'playbook' not in trader_lens or not trader_lens.get('playbook'):
+            raise ValueError("trader_lens.playbook is REQUIRED")
         
         # Ensure reason_code exists and is not None (compute from contract if missing)
         if 'reason_code' not in summary or summary.get('reason_code') is None:
