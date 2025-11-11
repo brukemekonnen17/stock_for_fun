@@ -523,6 +523,8 @@ FIELD MAPPING:
 - **If economics.blocked = true** → Verdict = SKIP (cannot be overridden by emotion)
 - **Clip social weight**: applied_weight ≤ 0.15 (emotion can tilt, not decide)
 - **Econ veto overrides**: If veto = "YES", verdict must be SKIP regardless of stats or flow
+- **Never infer values**: Never infer values not present in the payload. Any missing field → degrade to the stricter verdict.
+- **CI spans zero guard**: If CI spans zero (lower < 0 AND upper > 0), stats component ≤ 0.30 even if effect_bps > 0. (Prevents optimistic REACTIVE on noisy edges.)
 
 DECISION RULES:
 1. Find horizons with q < 0.10 AND effect_bps ≥ 30 (effect * 10000)
@@ -561,14 +563,18 @@ DECISION RULES:
 
 **CRITICAL**: Translate all statistical terms into plain language. Explain what the user can't see. Make it actionable.
 
-**REASON_CODE REQUIREMENT**: You MUST provide a `reason_code` string. Use:
-- "ECON_VETO" if economics.blocked=true or veto="YES"
+**REASON_CODE REQUIREMENT**: You MUST provide a `reason_code` string that explicitly reflects which gate tripped. Use:
+- "ECON_VETO" if economics.blocked=true or veto="YES" (highest priority - overrides everything)
+- "SKIP_SPREAD_TOO_WIDE" if spread_bps > 50 (even if stats good)
+- "SKIP_IMPACT_TOO_HIGH" if impact_bps > 20 (even if stats good)
+- "SKIP_ADV_FAIL" if adv_ok = false (even if stats good)
 - "ECON_BLOCK" if net_median is null or ≤ 0
 - "STATS_WEAK" if no horizon has q<0.10 AND effect≥30bps
-- "REACTIVE_STATS_WEAK_FLOW_OK" if verdict=REACTIVE due to weak stats but strong flow
+- "REACTIVE_STATS_WEAK_FLOW_OK" if verdict=REACTIVE due to weak stats but strong flow (flow_score≥0.60)
 - "REACTIVE_STATS_WEAK_SOCIAL_OK" if verdict=REACTIVE due to weak stats but strong social (z≥1.5)
-- "BUY_APPROVED" if verdict=BUY (all gates pass)
+- "BUY_APPROVED" if verdict=BUY (all gates pass: q<0.10, effect≥30bps, not blocked, spread≤50, impact≤20, adv_ok=true)
 - "TICKER_MISMATCH" if ticker doesn't match
+- "SCHEMA_FAIL" if schema validation fails
 - "OTHER" for other SKIP reasons"""
     
     return [
@@ -589,6 +595,10 @@ async def summarize_contract(contract: Dict[str, Any]) -> Dict[str, Any]:
     Raises:
         ValueError: If contract is invalid or missing required fields
     """
+    import time
+    start_time = time.time()
+    summarize_contract._start_time = start_time  # Store for telemetry
+    
     try:
         # Build prompt
         messages = build_summarizer_prompt(contract)
@@ -765,6 +775,63 @@ async def summarize_contract(contract: Dict[str, Any]) -> Dict[str, Any]:
             summary['omissions'] = []
         if 'citations' not in summary:
             summary['citations'] = []
+        
+        # Telemetry logging (high-leverage for debugging)
+        latency_ms = int((time.time() - start_time) * 1000) if start_time else None
+        
+        # Extract telemetry data
+        verdict = summary.get('verdict', 'UNKNOWN')
+        reason_code = summary.get('reason_code', 'UNKNOWN')
+        
+        # Determine confidence band
+        confidence = summary.get('confidence', 0.0)
+        if verdict == 'BUY':
+            confidence_band = '0.65-0.85'
+            class_band = 'BUY'
+        elif verdict == 'REACTIVE':
+            confidence_band = '0.45-0.65'
+            class_band = 'REACTIVE'
+        else:  # SKIP
+            confidence_band = '0.15-0.35'
+            class_band = 'SKIP'
+        
+        # Detect gate hits
+        gate_hits = []
+        if reason_code.startswith('ECON_VETO') or reason_code.startswith('SKIP_'):
+            gate_hits.append(reason_code)
+        if 'SPREAD' in reason_code:
+            gate_hits.append('spread_gate')
+        if 'IMPACT' in reason_code:
+            gate_hits.append('impact_gate')
+        if 'ADV' in reason_code:
+            gate_hits.append('adv_gate')
+        if 'STATS_WEAK' in reason_code:
+            gate_hits.append('stats_gate')
+        
+        # Get applied social weight (clipped)
+        applied_weight_social = None
+        if 'emotion_layer' in summary and summary['emotion_layer']:
+            applied_weight_social = summary['emotion_layer'].get('applied_weight')
+        
+        # Log telemetry
+        logger.info(
+            f"TELEMETRY: verdict={verdict}, reason_code={reason_code}, "
+            f"confidence={confidence:.2f} (band={confidence_band}), "
+            f"gate_hits={gate_hits}, applied_weight_social={applied_weight_social}, "
+            f"latency_ms={latency_ms}, parse_ok=True, schema_ok=True"
+        )
+        
+        # Store telemetry in summary metadata (optional, for debugging)
+        if 'telemetry' not in summary:
+            summary['telemetry'] = {
+                'dual_lens_v': '2.0',
+                'gate_hits': gate_hits,
+                'applied_weight_social': applied_weight_social,
+                'confidence_band': {'class_band': class_band, 'raw_confidence': confidence},
+                'latency_ms': latency_ms,
+                'parse_ok': True,
+                'schema_ok': True
+            }
         
         return summary
         
