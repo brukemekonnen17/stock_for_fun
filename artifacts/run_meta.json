@@ -1,9 +1,9 @@
 {
-  "ticker": "NVDA",
+  "ticker": "AAPL",
   "window_days": 730,
   "data_source": "cache",
   "seed": 42,
-  "run_id": "fc1585d0dfe4ec54",
-  "run_timestamp_utc": "2025-11-11T01:12:43.324611",
+  "run_id": "5153856b2946552a",
+  "run_timestamp_utc": "2025-11-11T01:26:38.304824",
   "m1_checks_passed": true
 }

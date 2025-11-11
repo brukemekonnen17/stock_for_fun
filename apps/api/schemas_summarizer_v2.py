@@ -38,6 +38,28 @@ class RiskItem(BaseModel):
     risk: str = Field(..., description="Risk description")
     paths: List[str] = Field(..., description="Contract JSON paths cited")
 
+class TraderLens(BaseModel):
+    """Intraday trader perspective - decisive, actionable"""
+    tone: str = Field(..., description="Tone: decisive, cautious, aggressive")
+    playbook: dict = Field(..., description="Concrete playbook with triggers, size, stops, targets")
+    what_to_watch: List[str] = Field(..., description="Key levels and signals to monitor")
+    short_term_verdict: Literal["YES", "NO"] = Field(..., description="Does this work for 1-2 day trade or intraday scalp?")
+    short_term_reason: str = Field(..., description="Why YES or NO for short-term opportunity")
+
+class AnalystLens(BaseModel):
+    """Professional analyst perspective - measured, risk-adjusted"""
+    tone: str = Field(..., description="Tone: measured, cautious, confident")
+    thesis: str = Field(..., description="Why the setup is (not) investable based on q/effect/capacity")
+    risks: List[str] = Field(..., description="Key risks to watch")
+    conditions_to_upgrade: List[str] = Field(..., description="What would need to change to upgrade verdict")
+
+class EmotionLayer(BaseModel):
+    """Emotion/social sentiment layer - acknowledged but clipped"""
+    social_z: Optional[float] = Field(None, description="Social sentiment z-score")
+    applied_weight: float = Field(..., description="Applied weight (clipped to ≤0.15)")
+    narrative_bias: str = Field(..., description="One-line narrative bias from social sentiment")
+    discipline: str = Field(default="Emotion can tilt REACTIVE sizing but cannot override econ gates", description="Discipline statement")
+
 class SummaryResponseV2(BaseModel):
     """Response schema for /summarize endpoint (v2 - Hardline)"""
     ticker: str = Field(..., description="Stock ticker")
@@ -56,6 +78,9 @@ class SummaryResponseV2(BaseModel):
     risks: List[RiskItem] = Field(..., min_items=1, description="Risks with citations")
     citations: List[str] = Field(..., description="All contract paths cited")
     omissions: List[str] = Field(default_factory=list, description="Missing fields noted")
+    trader_lens: Optional[TraderLens] = Field(None, description="Intraday trader perspective")
+    analyst_lens: Optional[AnalystLens] = Field(None, description="Professional analyst perspective")
+    emotion_layer: Optional[EmotionLayer] = Field(None, description="Emotion/social sentiment layer")
     
     class Config:
         json_schema_extra = {

@@ -1,9 +1,9 @@
 {
-  "analysis_id": "4d588eea-d5f5-4445-a662-3351ef3faa74",
-  "run_id": "fc1585d0dfe4ec54",
-  "ticker": "NVDA",
+  "analysis_id": "f708af70-d77f-496e-b311-9e53ed952627",
+  "run_id": "5153856b2946552a",
+  "ticker": "AAPL",
   "window_days": 730,
-  "timestamp": "2025-11-10T20:12:43.371105",
+  "timestamp": "2025-11-10T20:26:38.353310",
   "drivers": {
     "pattern": "GREEN",
     "sector_rs": "+",
@@ -19,7 +19,7 @@
       "p": null,
       "q": null,
       "hit_rate": null,
-      "n_events": 5
+      "n_events": 6
     },
     {
       "test": "EMA_Crossover",
@@ -29,7 +29,7 @@
       "p": null,
       "q": null,
       "hit_rate": null,
-      "n_events": 5
+      "n_events": 6
     },
     {
       "test": "EMA_Crossover",
@@ -39,7 +39,7 @@
       "p": null,
       "q": null,
       "hit_rate": null,
-      "n_events": 5
+      "n_events": 6
     },
     {
       "test": "EMA_Crossover",
@@ -49,7 +49,7 @@
       "p": null,
       "q": null,
       "hit_rate": null,
-      "n_events": 5
+      "n_events": 6
     },
     {
       "test": "EMA_Crossover",
@@ -59,85 +59,100 @@
       "p": null,
       "q": null,
       "hit_rate": null,
-      "n_events": 5
+      "n_events": 6
     },
     {
       "test": "EMA_Crossover",
       "H": 1,
-      "effect": null,
-      "ci": null,
-      "p": null,
-      "q": null,
-      "hit_rate": null,
-      "n_events": 7
+      "effect": -0.3905916470845378,
+      "ci": [
+        -0.014473967188164068,
+        0.00048796231659886506
+      ],
+      "p": 0.15597952073177832,
+      "q": 0.5226402069220086,
+      "hit_rate": 0.36363636363636365,
+      "n_events": 11
     },
     {
       "test": "EMA_Crossover",
       "H": 3,
-      "effect": null,
-      "ci": null,
-      "p": null,
-      "q": null,
-      "hit_rate": null,
-      "n_events": 7
+      "effect": -0.09972493855738455,
+      "ci": [
+        -0.021457681052879145,
+        0.016085763510605963
+      ],
+      "p": 0.8042037025691755,
+      "q": 0.978661892627632,
+      "hit_rate": 0.45454545454545453,
+      "n_events": 11
     },
     {
       "test": "EMA_Crossover",
       "H": 5,
-      "effect": null,
-      "ci": null,
-      "p": null,
-      "q": null,
-      "hit_rate": null,
-      "n_events": 7
+      "effect": -0.01058759509496091,
+      "ci": [
+        -0.02390865845594552,
+        0.023424848370073505
+      ],
+      "p": 0.978661892627632,
+      "q": 0.978661892627632,
+      "hit_rate": 0.5454545454545454,
+      "n_events": 11
     },
     {
       "test": "EMA_Crossover",
       "H": 10,
-      "effect": null,
-      "ci": null,
-      "p": null,
-      "q": null,
-      "hit_rate": null,
-      "n_events": 7
+      "effect": -0.08128476147369755,
+      "ci": [
+        -0.025304459459491665,
+        0.018967534450857377
+      ],
+      "p": 0.7789081098688828,
+      "q": 0.978661892627632,
+      "hit_rate": 0.6363636363636364,
+      "n_events": 11
     },
     {
       "test": "EMA_Crossover",
       "H": 20,
-      "effect": null,
-      "ci": null,
-      "p": null,
-      "q": null,
-      "hit_rate": null,
-      "n_events": 7
+      "effect": -0.5303115828155146,
+      "ci": [
+        -0.09288577840283752,
+        0.011444289475603636
+      ],
+      "p": 0.20905608276880344,
+      "q": 0.5226402069220086,
+      "hit_rate": 0.45454545454545453,
+      "n_events": 11
     }
   ],
   "economics": {
-    "net_median": null,
+    "net_median": -0.01058759509496091,
     "net_p90": null,
     "blocked": false,
     "spread_bps_quote": 7.0,
     "slippage_bps_quote": 2.0,
     "slippage_bps_atr": 50.0,
     "total_cost_bps": 55.0,
-    "impact_bps": 5.366905125412473,
+    "impact_bps": 9.0189401777806,
     "impact_veto": false,
     "adv_ok": true
   },
   "plan": {
-    "entry_price": 199.05,
-    "stop_price": 182.7893142857143,
-    "target_price": 223.44102857142857,
-    "stop_pct": -8.169146302077724,
-    "target_pct": 12.253719453116574,
-    "atr_used": 8.130342857142855,
-    "worst_entry": 199.189335,
-    "worst_exit": 182.6613617657143,
-    "worst_loss_pct": -8.297619565970084,
-    "worst_loss_abs": 16.527973234285696,
-    "risk_reward": 1.5000000000000009,
+    "entry_price": 269.43,
+    "stop_price": 259.18915714285714,
+    "target_price": 284.7912642857143,
+    "stop_pct": -3.800928945233595,
+    "target_pct": 5.701393417850387,
+    "atr_used": 5.1204214285714285,
+    "worst_entry": 269.618601,
+    "worst_exit": 259.0077247328571,
+    "worst_loss_pct": -3.9355134355670383,
+    "worst_loss_abs": 10.610876267142885,
+    "risk_reward": 1.5,
     "total_cost_bps": 7.0,
-    "policy_ok": false
+    "policy_ok": true
   },
   "risks": [
     "Net returns not positive after costs",
@@ -148,19 +163,19 @@
   "verdict": "YELLOW",
   "score": 0.0,
   "best_evidence": {
-    "horizon": 1,
-    "effect_bps": null,
+    "horizon": 5,
+    "effect_bps": -22.98630553640546,
     "effect_floor_pass": null,
-    "n_events": 7,
+    "n_events": 11,
     "limited_power": true,
     "significance_reason": null,
     "significance_chip": null,
     "ci_source": "standard",
     "ci_unstable": null,
-    "hit_rate": null,
+    "hit_rate": 0.5454545454545454,
     "significant": null
   },
-  "car_ci": "N/A",
+  "car_ci": "[-0.0239, 0.0234]",
   "social_signals": {
     "meme": {
       "meme_level": "MED",
@@ -172,12 +187,18 @@
       "significant": "True"
     },
     "sentiment": {
-      "source": "reddit",
       "total_mentions": 14,
+      "sentiment_score": 0.0,
       "bull_ratio": 0.5,
-      "bear_ratio": null,
+      "sources": [],
+      "source": "reddit",
+      "confidence": 0.0,
+      "data_quality": "low",
+      "source_breakdown": {},
+      "stocktwits_mentions": 0,
+      "stocktwits_bull_ratio": 0.5,
       "reddit_mentions": 14,
-      "stocktwits_mentions": 0
+      "reddit_sentiment": 0.9076
     }
   },
   "signals": {
@@ -185,27 +206,27 @@
       "signal": "ema_crossover",
       "verdict": "REVIEW",
       "rationale": "Limited power (n < 20)",
-      "best_H": 1,
-      "effect_g": null,
-      "hl_diff_bps": null,
-      "cliff_delta": null,
-      "bayes_pr_pos": null,
-      "perm_p": null,
-      "ci_95": "N/A",
-      "p": null,
-      "q": null,
-      "hit": null,
-      "net_median": null,
-      "net_p90": null,
-      "n_events": 7,
+      "best_H": 5,
+      "effect_g": -0.01058759509496091,
+      "hl_diff_bps": -22.98630553640546,
+      "cliff_delta": -0.03208556149732621,
+      "bayes_pr_pos": 0.4975613063105533,
+      "perm_p": 0.9715142428785607,
+      "ci_95": "[-0.0239, 0.0234]",
+      "p": 0.978661892627632,
+      "q": 0.978661892627632,
+      "hit": 0.5454545454545454,
+      "net_median": -0.004305321748575059,
+      "net_p90": 0.06388301389447221,
+      "n_events": 11,
       "limited_power": true,
       "gates": {
-        "q_gate": false,
-        "hl_gate": false,
-        "delta_gate": false,
-        "bayes_gate": false,
-        "perm_gate": true,
-        "net_gate": false,
+        "q_gate": "False",
+        "hl_gate": "False",
+        "delta_gate": "False",
+        "bayes_gate": "False",
+        "perm_gate": "False",
+        "net_gate": "False",
         "impact_gate": true,
         "limited_power": true
       }
@@ -226,7 +247,7 @@
       "hit": null,
       "net_median": null,
       "net_p90": null,
-      "n_events": 5,
+      "n_events": 6,
       "limited_power": true,
       "gates": {
         "q_gate": false,
@@ -242,10 +263,10 @@
   },
   "hybrid_decision": {
     "verdict": "SKIP",
-    "evidence_score": 0.23252764382704139,
+    "evidence_score": 0.20500000000000002,
     "components": {
       "S": 0.0,
-      "F": 0.1376382191352068,
+      "F": 0.0,
       "R": 0.4,
       "C": 0.5,
       "M": 0.75

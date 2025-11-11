@@ -402,18 +402,24 @@ For each evidence entry in `evidence[]`, explain:
    - **If social signals are missing**: "Social sentiment data is not available for this analysis."
 6. **Statistical Results**: "The statistical tests show [reliable/unreliable] because [specific p/q/effect interpretation]..."
 7. **Economics**: "After accounting for trading costs, [net_median interpretation]..."
-8. **Short-Term/Intraday Opportunity Assessment** (CRITICAL - evaluate even if stats are weak):
-   - **Question**: "Even if statistical evidence is weak, does this setup make sense for a short-term trade (1-2 days) or intraday scalp?"
-   - **Evaluate**:
-     - **Volume/Flow**: "Volume surge [present/absent] suggests [momentum building/fading]. [High/low] volume means [institutional/retail] participation."
-     - **Social Momentum**: "Social sentiment shows [X] mentions - [high enough/low] for a quick retail-driven move. [Bullish/bearish] chatter could create [momentum/fade]."
-     - **Pattern Context**: "The EMA crossover [just happened/is forming], which historically [does/doesn't] create short-term momentum even if long-term stats are weak."
-     - **Regime**: "Current market regime [trending/choppy/volatile] [supports/doesn't support] quick moves."
-     - **Day Trader Perspective**: "As a day trader, I see [opportunity/no opportunity] here because [specific reason: volume surge, social momentum, pattern timing, etc.]. This [could/couldn't] be a quick scalp for [X]% gain with tight stops."
-     - **Analyst Perspective**: "From an institutional view, weak stats mean [no edge/limited edge], but [flow/social/regime] factors suggest [short-term opportunity exists/doesn't exist]."
-   - **Verdict**: 
-     - **If YES (short-term opportunity exists despite weak stats)**: "While statistical evidence is weak, this setup could work for a SHORT-TERM trade (1-2 days) or intraday scalp because [volume/social/flow/regime reasons]. Use tight stops and quick profit-taking."
-     - **If NO (no short-term opportunity)**: "Even for short-term trading, this setup doesn't make sense because [volume is low/social momentum is weak/regime doesn't support/pattern timing is off]. Skip even for intraday."
+8. **SHORT-TERM/INTRADAY OPPORTUNITY ASSESSMENT** (CRITICAL - STANDALONE SECTION):
+   **This MUST be a prominent, separate section with clear YES/NO verdict.**
+   
+   **Question**: "Even if statistical evidence is weak, does this setup make sense for a short-term trade (1-2 days) or intraday scalp?"
+   
+   **Evaluation Factors**:
+   - **Volume/Flow**: "Volume surge [present/absent] suggests [momentum building/fading]. [High/low] volume means [institutional/retail] participation."
+   - **Social Momentum**: "Social sentiment shows [X] mentions - [high enough/low] for a quick retail-driven move. [Bullish/bearish] chatter could create [momentum/fade]."
+   - **Pattern Timing**: "The EMA crossover [just happened/is forming], which historically [does/doesn't] create short-term momentum even if long-term stats are weak."
+   - **Regime**: "Current market regime [trending/choppy/volatile] [supports/doesn't support] quick moves."
+   
+   **Dual Perspective**:
+   - **Day Trader**: "As a day trader, I see [opportunity/no opportunity] here because [specific reason: volume surge, social momentum, pattern timing, etc.]. This [could/couldn't] be a quick scalp for [X]% gain with tight stops."
+   - **Analyst**: "From an institutional view, weak stats mean [no edge/limited edge], but [flow/social/regime] factors suggest [short-term opportunity exists/doesn't exist]."
+   
+   **VERDICT (Must be explicit YES or NO)**:
+   - **If YES**: "✅ SHORT-TERM OPPORTUNITY: While statistical evidence is weak, this setup could work for a SHORT-TERM trade (1-2 days) or intraday scalp because [volume/social/flow/regime reasons]. Use tight stops (0.6×ATR), quick profit-taking (1.0×ATR target), and exit by T+2 if not working."
+   - **If NO**: "❌ NO SHORT-TERM OPPORTUNITY: Even for short-term trading, this setup doesn't make sense because [volume is low/social momentum is weak/regime doesn't support/pattern timing is off]. Skip even for intraday."
 9. **Decision**: "Therefore, we [BUY/REACTIVE/SKIP] because [specific evidence from above, including social sentiment and short-term assessment if relevant]..."
 10. **Action/Playbook** (if hybrid_decision.playbook_type exists):
    - For BUY: "Use the Swing Playbook: [entry/risk/target/hold details]"
@@ -469,7 +475,33 @@ OUTPUT SCHEMA (strict):
     {{ "risk": "string (translate technical risk to business risk)", "paths": ["string"] }}
   ],
   "citations": ["string"],
-  "omissions": ["string"]
+  "omissions": ["string"],
+  "trader_lens": {{
+    "tone": "decisive|cautious|aggressive",
+    "playbook": {{
+      "trigger": "string (concrete entry trigger, e.g., volume surge, VWAP reclaim)",
+      "size_rule": "string (position sizing guidance)",
+      "stop": "string (stop loss rule, e.g., entry - 0.6×ATR)",
+      "target": "string (target rule, e.g., entry + 1.0×ATR)",
+      "time_stop": "string (time-based exit, e.g., exit by T+2 if R<0.8)",
+      "invalidation": "string (conditions that invalidate the setup)"
+    }},
+    "what_to_watch": ["string (key levels and signals to monitor)"],
+    "short_term_verdict": "YES|NO",
+    "short_term_reason": "string (why YES or NO for short-term opportunity)"
+  }},
+  "analyst_lens": {{
+    "tone": "measured|cautious|confident",
+    "thesis": "string (why setup is (not) investable based on q/effect/capacity)",
+    "risks": ["string (key risks to watch)"],
+    "conditions_to_upgrade": ["string (what would need to change to upgrade verdict)"]
+  }},
+  "emotion_layer": {{
+    "social_z": "number|null (social sentiment z-score from meme_result)",
+    "applied_weight": "number (clipped to ≤0.15)",
+    "narrative_bias": "string (one-line narrative bias from social sentiment)",
+    "discipline": "string (must include: Emotion can tilt REACTIVE sizing but cannot override econ gates)"
+  }}
 }}
 
 FIELD MAPPING:
@@ -485,21 +517,57 @@ FIELD MAPPING:
 - risks: contract.risks[] (array of risk strings)
 - social_signals: contract.social_signals (meme and sentiment snapshots)
 
+**GUARDRAILS (Hard Rules - Apply BEFORE any emotion/judgment)**:
+- **BUY requires ALL**: q < 0.10 AND effect_bps ≥ 30 AND economics.blocked = false AND spread_bps ≤ 50 AND impact_bps ≤ 20 AND adv_ok = true
+- **REACTIVE allowed if**: (flow_score ≥ 0.60 OR social.z ≥ 1.5) AND capacity within limits AND economics.blocked = false
+- **If economics.blocked = true** → Verdict = SKIP (cannot be overridden by emotion)
+- **Clip social weight**: applied_weight ≤ 0.15 (emotion can tilt, not decide)
+- **Econ veto overrides**: If veto = "YES", verdict must be SKIP regardless of stats or flow
+
 DECISION RULES:
 1. Find horizons with q < 0.10 AND effect_bps ≥ 30 (effect * 10000)
-2. If none → stats_significant=false, verdict=SKIP
-3. BUY only if: stats_significant=true AND net_median>0 AND blocked=false AND policy_ok=true
-4. REVIEW if: stats_significant=true but one gate fails
-5. SKIP otherwise
+2. If none → stats_significant=false
+3. Apply guardrails above
+4. BUY only if: stats_significant=true AND all guardrails pass
+5. REACTIVE if: stats are weak BUT (flow_score≥0.60 OR social.z≥1.5) AND capacity within limits AND not blocked
+6. SKIP otherwise (including if blocked=true)
+
+**DUAL-LENS OUTPUT REQUIREMENTS** (MUST populate all three):
+
+**trader_lens** (Intraday trader perspective - decisive, actionable):
+- **tone**: "decisive" for strong setups, "cautious" for weak, "aggressive" for high-conviction
+- **playbook**: Provide concrete, executable rules:
+  - **trigger**: Specific entry condition (e.g., "Volume surge ≥1.5× 5d median AND EMA crossover confirmed")
+  - **size_rule**: Position sizing (e.g., "0.5× base size for REACTIVE, 1.0× for BUY")
+  - **stop**: Stop loss rule using ATR (e.g., "entry - 0.6×ATR(14)" for reactive, "entry - 1.5×ATR(14)" for swing)
+  - **target**: Target rule using ATR (e.g., "entry + 1.0×ATR(14)" for reactive, "entry + 2.0×ATR(14)" for swing)
+  - **time_stop**: Time-based exit (e.g., "Exit by T+2 if R<0.8" for reactive, "Hold 3-10 days" for swing)
+  - **invalidation**: Conditions that invalidate setup (e.g., "15m close < VWAP AND vol_ratio<1.0 for 2 bars")
+- **what_to_watch**: List 3-5 key levels/signals (e.g., "Volume sustain ≥1.4× for 3 bars", "VWAP holds on ≤0.2×ATR pullbacks")
+- **short_term_verdict**: "YES" or "NO" - explicit answer to "Does this work for 1-2 day trade or intraday scalp?"
+- **short_term_reason**: Clear explanation of why YES or NO
+
+**analyst_lens** (Professional analyst perspective - measured, risk-adjusted):
+- **tone**: "measured" for balanced view, "cautious" for weak evidence, "confident" for strong evidence
+- **thesis**: Explain why setup is (not) investable based on q-value, effect_bps, capacity, economics
+- **risks**: List 3-5 key risks (e.g., "Statistical edge not validated (q>0.10)", "Costs overwhelm effect", "Flow reversals")
+- **conditions_to_upgrade**: List what would need to change to upgrade verdict (e.g., "q<0.10 and effect≥30bps on next run", "improve net_median_bps > 0 after costs")
+
+**emotion_layer** (Emotion/social sentiment - acknowledged but clipped):
+- **social_z**: Use meme_result.z_score if available, else null
+- **applied_weight**: Clip social weight to ≤0.15 (use min(0.15, weights.social) from hybrid_decision if available)
+- **narrative_bias**: One-line summary of social sentiment (e.g., "moderate bullish chatter", "high retail attention")
+- **discipline**: MUST include verbatim: "Emotion can tilt REACTIVE sizing but cannot override econ gates"
 
 **CRITICAL**: Translate all statistical terms into plain language. Explain what the user can't see. Make it actionable.
 
 **REASON_CODE REQUIREMENT**: You MUST provide a `reason_code` string. Use:
-- "ECON_VETO" if economics.blocked=true
+- "ECON_VETO" if economics.blocked=true or veto="YES"
 - "ECON_BLOCK" if net_median is null or ≤ 0
 - "STATS_WEAK" if no horizon has q<0.10 AND effect≥30bps
-- "REVIEW_CONDITIONAL" if verdict=REVIEW
-- "BUY_APPROVED" if verdict=BUY
+- "REACTIVE_STATS_WEAK_FLOW_OK" if verdict=REACTIVE due to weak stats but strong flow
+- "REACTIVE_STATS_WEAK_SOCIAL_OK" if verdict=REACTIVE due to weak stats but strong social (z≥1.5)
+- "BUY_APPROVED" if verdict=BUY (all gates pass)
 - "TICKER_MISMATCH" if ticker doesn't match
 - "OTHER" for other SKIP reasons"""
     
