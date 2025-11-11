@@ -441,6 +441,14 @@ Requested ticker: {contract.get('ticker', 'UNKNOWN')}
 analysis_contract:
 {contract_str}
 
+**CRITICAL: OUTPUT FORMAT - READ THIS FIRST**:
+Your response must be **ONLY** the JSON object. Do NOT include:
+- Any introductory text like "Here is the summary:" or "Here is the executive summary:"
+- Any explanatory prose before or after the JSON
+- Any markdown formatting or code blocks
+
+Start your response with a single opening brace {{ and end with a single closing brace }}. The entire response must be valid JSON that can be parsed directly by json.loads(). Example: {{"ticker": "AAPL", ...}}
+
 OUTPUT SCHEMA (strict):
 **CRITICAL JSON FORMATTING RULES**:
 1. Output must be valid JSON - test it before sending
@@ -509,6 +517,12 @@ OUTPUT SCHEMA (strict):
 }}
 
 **CRITICAL**: trader_lens, analyst_lens, and emotion_layer are REQUIRED fields. You MUST populate all three in your JSON output.
+
+**CRITICAL OUTPUT FORMAT**:
+- Output **ONLY** the JSON object. Do NOT include any prose, explanations, or text before or after the JSON.
+- Do NOT write "Here is the summary:" or any other introductory text.
+- Start your response with a single opening brace and end with a single closing brace (the JSON object delimiters).
+- The entire response must be valid JSON that can be parsed directly.
 
 FIELD MAPPING:
 - ticker, run_id, timestamp: contract root level
@@ -604,6 +618,7 @@ async def summarize_contract(contract: Dict[str, Any]) -> Dict[str, Any]:
         ValueError: If contract is invalid or missing required fields
     """
     import time
+    import re
     start_time = time.time()
     summarize_contract._start_time = start_time  # Store for telemetry
     
@@ -620,10 +635,11 @@ async def summarize_contract(contract: Dict[str, Any]) -> Dict[str, Any]:
                 "LLM returned empty response. Check ANTHROPIC_API_KEY is set and LLM service is available."
             )
         
-        # Try to extract JSON if wrapped in markdown code blocks
+        # Try to extract JSON from response (handle multiple formats)
         response_text = response_text.strip()
+        
+        # Case 1: JSON wrapped in markdown code blocks
         if response_text.startswith("```"):
-            # Extract JSON from markdown code block
             lines = response_text.split("\n")
             json_start = None
             json_end = None
@@ -639,8 +655,55 @@ async def summarize_contract(contract: Dict[str, Any]) -> Dict[str, Any]:
                 if json_end:
                     response_text = "\n".join(lines[json_start:json_end])
         
+        # Case 2: Text before JSON (e.g., "Here is the summary: { ... }")
+        # Find the first { that starts a JSON object
+        if not response_text.startswith("{") and "{" in response_text:
+            # Find the first opening brace
+            first_brace = response_text.find("{")
+            if first_brace > 0:
+                # Check if there's text before it (likely prose)
+                text_before = response_text[:first_brace].strip()
+                # If it looks like prose (contains words, not just whitespace), extract JSON from first brace
+                if len(text_before) > 0 and any(c.isalpha() for c in text_before):
+                    logger.info(f"Extracting JSON from response with text prefix: '{text_before[:50]}...'")
+                    response_text = response_text[first_brace:]
+                    # Try to find the matching closing brace (handle nested objects)
+                    # Count braces to find where the JSON object ends
+                    brace_count = 0
+                    json_end = len(response_text)
+                    for i, char in enumerate(response_text):
+                        if char == "{":
+                            brace_count += 1
+                        elif char == "}":
+                            brace_count -= 1
+                            if brace_count == 0:
+                                json_end = i + 1
+                                break
+                    if json_end < len(response_text):
+                        # There's text after the JSON, remove it
+                        response_text = response_text[:json_end]
+        
+        # Case 3: JSON might be at the end after prose (if Case 2 didn't work)
+        # Find the last complete JSON object (from { to matching })
+        if not response_text.startswith("{") and "{" in response_text:
+            # Try to find the last { that has a matching }
+            # Find all { positions
+            brace_positions = [m.start() for m in re.finditer(r'\{', response_text)]
+            if brace_positions:
+                # Start from the last { and try to find matching }
+                for start_pos in reversed(brace_positions):
+                    # Try to extract JSON from this position
+                    potential_json = response_text[start_pos:]
+                    # Count braces to see if it's balanced
+                    open_count = potential_json.count("{")
+                    close_count = potential_json.count("}")
+                    if open_count == close_count and open_count > 0:
+                        # This looks like a complete JSON object
+                        logger.info(f"Extracting JSON from position {start_pos} (found balanced braces)")
+                        response_text = potential_json
+                        break
+        
         # Clean response text (remove control characters and fix common JSON issues)
-        import re
         # First, try to parse as-is
         try:
             summary = json.loads(response_text)
